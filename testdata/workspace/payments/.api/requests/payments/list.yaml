@@ -1,0 +1,4 @@
+name: List payments
+method: GET
+request:
+  url: https://api.example.test/payments
