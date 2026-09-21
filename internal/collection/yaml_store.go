@@ -77,6 +77,23 @@ func LoadRequest(path string) (model.Request, error) {
 	}, nil
 }
 
+// LoadGroup reads optional group settings inherited by requests in its directory.
+func LoadGroup(path string) (model.Group, error) {
+	var document groupDocument
+	if err := loadYAML(path, &document); err != nil {
+		return model.Group{}, err
+	}
+
+	auth, err := decodeAuth(document.Auth)
+	if err != nil {
+		return model.Group{}, fmt.Errorf("decode auth: %w", err)
+	}
+	if err := rejectLiteralSecret(auth); err != nil {
+		return model.Group{}, err
+	}
+	return model.Group{Name: document.Name, Auth: auth}, nil
+}
+
 // SaveRequest writes request to path atomically. Client secrets must remain
 // process environment references, never literal values.
 func SaveRequest(path string, request model.Request) error {
@@ -116,6 +133,11 @@ type collectionDocument struct {
 	Description string            `yaml:"description,omitempty"`
 	Auth        yaml.Node         `yaml:"auth,omitempty"`
 	HTTP        *model.HTTPConfig `yaml:"http,omitempty"`
+}
+
+type groupDocument struct {
+	Name string    `yaml:"name,omitempty"`
+	Auth yaml.Node `yaml:"auth,omitempty"`
 }
 
 type requestWriteDocument struct {
