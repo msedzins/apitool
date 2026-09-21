@@ -40,18 +40,26 @@ func Definition(request model.Request) []model.Diagnostic {
 		}
 	}
 
-	if auth := request.Auth; auth != nil && !auth.None {
-		if auth.Type != "oauth2" {
-			diagnostics = append(diagnostics, errorDiagnostic("auth_type_unsupported", "auth.type", "auth type must be oauth2"))
-		}
-		if auth.Grant != "client_credentials" {
-			diagnostics = append(diagnostics, errorDiagnostic("auth_grant_unsupported", "auth.grant", "OAuth grant must be client_credentials"))
-		}
-		if auth.ClientSecret != "" && !isEnvironmentReference(auth.ClientSecret) {
-			diagnostics = append(diagnostics, errorDiagnostic("secret_literal", "auth.client_secret", "client_secret must be a single process environment reference"))
-		}
-	}
+	diagnostics = append(diagnostics, Auth(request.Auth)...)
 
+	return diagnostics
+}
+
+// Auth reports structural problems in an inherited auth configuration.
+func Auth(auth *model.Auth) []model.Diagnostic {
+	if auth == nil || auth.None {
+		return nil
+	}
+	var diagnostics []model.Diagnostic
+	if auth.Type != "oauth2" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_type_unsupported", "auth.type", "auth type must be oauth2"))
+	}
+	if auth.Grant != "client_credentials" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_grant_unsupported", "auth.grant", "OAuth grant must be client_credentials"))
+	}
+	if auth.ClientSecret != "" && !isEnvironmentReference(auth.ClientSecret) {
+		diagnostics = append(diagnostics, errorDiagnostic("secret_literal", "auth.client_secret", "client_secret must be a single process environment reference"))
+	}
 	return diagnostics
 }
 

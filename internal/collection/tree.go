@@ -80,7 +80,7 @@ func BuildTree(collectionRoot string) (Tree, []model.Diagnostic) {
 
 	err := filepath.WalkDir(requestsRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			id := definitionID(requestsRoot, path)
+			id := relativeID(requestsRoot, path)
 			diagnostic := loadDiagnostic("tree_walk", relativeDefinitionPath(collectionRoot, path), walkErr)
 			diagnostics = append(diagnostics, diagnostic)
 			addInvalid(&tree, id, path, diagnostic)
@@ -103,7 +103,7 @@ func BuildTree(collectionRoot string) (Tree, []model.Diagnostic) {
 			case ".git", ".apitool", ".api":
 				return filepath.SkipDir
 			}
-			id := definitionID(requestsRoot, path)
+			id := relativeID(requestsRoot, path)
 			groups[id] = GroupNode{ID: id, ParentID: parentGroupID(id)}
 			return nil
 		}
@@ -111,9 +111,9 @@ func BuildTree(collectionRoot string) (Tree, []model.Diagnostic) {
 			return nil
 		}
 
-		id := definitionID(requestsRoot, path)
+		id := requestID(requestsRoot, path)
 		if entry.Name() == "_group.yaml" {
-			groupID := definitionID(requestsRoot, filepath.Dir(path))
+			groupID := relativeID(requestsRoot, filepath.Dir(path))
 			node := groups[groupID]
 			group, err := LoadGroup(path)
 			if err != nil {
@@ -123,6 +123,14 @@ func BuildTree(collectionRoot string) (Tree, []model.Diagnostic) {
 				addInvalid(&tree, groupID, path, diagnostic)
 			} else {
 				node.Group = group
+				groupDiagnostics := diagnosticsAt(relativeDefinitionPath(collectionRoot, path), validate.Auth(group.Auth))
+				if len(groupDiagnostics) != 0 {
+					node.Diagnostics = append(node.Diagnostics, groupDiagnostics...)
+					diagnostics = append(diagnostics, groupDiagnostics...)
+					for _, diagnostic := range groupDiagnostics {
+						addInvalid(&tree, groupID, path, diagnostic)
+					}
+				}
 			}
 			groups[groupID] = node
 			return nil
@@ -205,12 +213,16 @@ func groupChain(groups map[string]GroupNode, requestDirectory, requestsRoot stri
 	return chain
 }
 
-func definitionID(requestsRoot, path string) string {
+func relativeID(requestsRoot, path string) string {
 	relative, err := filepath.Rel(requestsRoot, path)
 	if err != nil || relative == "." {
 		return ""
 	}
-	return strings.TrimSuffix(filepath.ToSlash(relative), ".yaml")
+	return filepath.ToSlash(relative)
+}
+
+func requestID(requestsRoot, path string) string {
+	return strings.TrimSuffix(relativeID(requestsRoot, path), ".yaml")
 }
 
 func parentGroupID(id string) string {

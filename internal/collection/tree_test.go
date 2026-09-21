@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"apitool/internal/collection"
+	"apitool/internal/model"
 )
 
 func TestBuildTreeUsesRequestPathAsStableIDAndKeepsInvalidSibling(t *testing.T) {
@@ -78,6 +79,62 @@ func TestBuildTreeAppliesGroupMetadataWhenRequestSortsBeforeGroupFile(t *testing
 	request := tree.Requests["admin/A-list"]
 	if len(request.Groups) != 1 || request.Groups[0].Group.Auth == nil || !request.Groups[0].Group.Auth.None {
 		t.Fatalf("request group chain = %#v, want group auth none", request.Groups)
+	}
+}
+
+func TestBuildTreePreservesYAMLSuffixInGroupDirectoryID(t *testing.T) {
+	root := collectionRoot(t)
+	writeDefinition(t, root, "admin.yaml/_group.yaml", "name: Admin\nauth: none\n")
+	writeDefinition(t, root, "admin.yaml/list.yaml", "name: List admin\nmethod: GET\nrequest:\n  url: https://api.example.test/admin\n")
+
+	tree, diagnostics := collection.BuildTree(root)
+	if len(diagnostics) != 0 {
+		t.Fatalf("BuildTree() diagnostics = %#v, want none", diagnostics)
+	}
+	request, ok := tree.Requests["admin.yaml/list"]
+	if !ok {
+		t.Fatalf("BuildTree() requests = %#v, want admin.yaml/list", tree.Requests)
+	}
+	if got, want := groupIDs(request.Groups), []string{"admin.yaml"}; !equalGroupIDs(got, want) {
+		t.Fatalf("request group chain = %#v, want %#v", got, want)
+	}
+	if request.Groups[0].Group.Auth == nil || !request.Groups[0].Group.Auth.None {
+		t.Fatalf("request group auth = %#v, want auth none", request.Groups[0].Group.Auth)
+	}
+}
+
+func TestBuildTreeMarksInvalidYAMLSuffixGroupAuthAndDependentRequest(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		auth       string
+		diagnostic string
+	}{
+		{name: "unsupported type", auth: "type: basic", diagnostic: "auth_type_unsupported"},
+		{name: "unsupported grant", auth: "type: oauth2\n  grant: authorization_code", diagnostic: "auth_grant_unsupported"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := collectionRoot(t)
+			writeDefinition(t, root, "admin.yaml/_group.yaml", "auth:\n  "+test.auth+"\n")
+			writeDefinition(t, root, "admin.yaml/list.yaml", "name: List admin\nmethod: GET\nrequest:\n  url: https://api.example.test/admin\n")
+
+			tree, diagnostics := collection.BuildTree(root)
+			if _, ok := tree.Invalid["admin.yaml"]; !ok {
+				t.Fatalf("BuildTree() invalid = %#v, want invalid admin.yaml group", tree.Invalid)
+			}
+			if _, ok := tree.Invalid["admin.yaml/list"]; !ok {
+				t.Fatalf("BuildTree() invalid = %#v, want invalid dependent request", tree.Invalid)
+			}
+			request, ok := tree.Requests["admin.yaml/list"]
+			if !ok {
+				t.Fatalf("BuildTree() requests = %#v, want retained dependent request", tree.Requests)
+			}
+			if !hasDiagnosticCode(request.Diagnostics, test.diagnostic) {
+				t.Fatalf("request diagnostics = %#v, want %q", request.Diagnostics, test.diagnostic)
+			}
+			if !hasDiagnosticCode(diagnostics, test.diagnostic) {
+				t.Fatalf("tree diagnostics = %#v, want %q", diagnostics, test.diagnostic)
+			}
+		})
 	}
 }
 
@@ -156,4 +213,13 @@ func equalGroupIDs(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func hasDiagnosticCode(diagnostics []model.Diagnostic, want string) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == want {
+			return true
+		}
+	}
+	return false
 }
