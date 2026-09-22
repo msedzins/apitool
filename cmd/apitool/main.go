@@ -2,30 +2,40 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 
 	"apitool/internal/app"
+	"apitool/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	options, err := parseStartupOptions(os.Args[1:])
-	if err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "apitool: %v\n", err)
-		os.Exit(2)
+		os.Exit(1)
+	}
+}
+
+func run(arguments []string) error {
+	options, err := parseStartupOptions(arguments)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
 	}
 	model, err := newApplication(options)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "apitool: initialize application: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("initialize application: %w", err)
 	}
 	if err := runProgram(model); err != nil {
-		fmt.Fprintf(os.Stderr, "apitool: run application: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("run application: %w", err)
 	}
+	return nil
 }
 
 var runProgram = func(model tea.Model) error { _, err := tea.NewProgram(model).Run(); return err }
@@ -39,11 +49,14 @@ func newApplication(options startupOptions) (tea.Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	opened, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: options.Collection, Environment: options.Environment, ConfirmDangerous: options.ConfirmDangerous})
-	if err != nil {
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: options.Collection, Environment: options.Environment, ConfirmDangerous: options.ConfirmDangerous}); err != nil {
 		return nil, err
 	}
-	return appModel{options: options, service: service, workspace: opened, selectedCollection: options.Collection}, nil
+	return tui.New(service, tui.Options{
+		StartingCollection:  options.Collection,
+		StartingEnvironment: options.Environment,
+		ConfirmDangerous:    options.ConfirmDangerous,
+	}), nil
 }
 
 type startupOptions struct {
@@ -70,18 +83,3 @@ func parseStartupOptions(arguments []string) (startupOptions, error) {
 	}
 	return options, nil
 }
-
-type appModel struct {
-	options            startupOptions
-	service            *app.Service
-	workspace          app.Workspace
-	selectedCollection string
-}
-
-func (appModel) Init() tea.Cmd { return nil }
-
-func (model appModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
-	return model, nil
-}
-
-func (appModel) View() string { return "" }

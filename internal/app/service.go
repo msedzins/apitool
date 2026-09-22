@@ -200,6 +200,15 @@ func (s *Service) OpenCollection(_ context.Context, collectionPath string) (Coll
 	return s.collection(collectionPath)
 }
 
+// Workspace returns the currently opened workspace view for read-only clients
+// such as the terminal UI.
+func (s *Service) Workspace() (Workspace, error) {
+	if s.opened == nil {
+		return Workspace{}, errors.New("workspace is not open")
+	}
+	return *s.opened, nil
+}
+
 func (s *Service) SelectEnvironment(_ context.Context, collectionPath, environment string) (CollectionView, error) {
 	view, err := s.collection(collectionPath)
 	if err != nil {
