@@ -174,7 +174,10 @@ func (s *Service) SaveRequest(_ context.Context, selection Selection, request mo
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create request directory: %w", err)
 	}
-	return collection.SaveRequest(path, request)
+	if err := collection.SaveRequest(path, request); err != nil {
+		return err
+	}
+	return s.refreshTree(selection.Collection)
 }
 
 func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
@@ -254,6 +257,13 @@ func (s *Service) Delete(_ context.Context, collectionPath, id string, group, co
 	if id == "" || filepath.IsAbs(rel) || strings.HasPrefix(filepath.Clean(rel), "..") {
 		return DeleteTarget{}, errors.New("invalid deletion target")
 	}
+	safeRelative := rel
+	if !group {
+		safeRelative += ".yaml"
+	}
+	if err := rejectSymlinkSegments(base, safeRelative); err != nil {
+		return DeleteTarget{}, err
+	}
 	target := filepath.Join(base, rel)
 	if !group {
 		target += ".yaml"
@@ -289,6 +299,17 @@ func (s *Service) collection(path string) (CollectionView, error) {
 		return CollectionView{}, fmt.Errorf("collection %q not found", path)
 	}
 	return view, nil
+}
+func (s *Service) refreshTree(collectionPath string) error {
+	view, err := s.collection(collectionPath)
+	if err != nil {
+		return err
+	}
+	tree, diagnostics := collection.BuildTree(view.Root)
+	view.Tree = tree
+	view.Diagnostics = diagnostics
+	s.opened.Collections[collectionPath] = view
+	return nil
 }
 func loadEnvironments(root string) map[string]model.Environment {
 	result := map[string]model.Environment{}
@@ -335,6 +356,13 @@ func executionResult(err error) SendResult {
 func executionLog(key runtime.Key, e model.EffectiveRequest, r model.Response, x *model.ExecutionError) runtime.LogEntry {
 	path := ""
 	if parsed, err := url.Parse(e.URL); err == nil {
+		query := parsed.Query()
+		for name := range query {
+			if sensitiveLogKey(name) {
+				query.Set(name, "[REDACTED]")
+			}
+		}
+		parsed.RawQuery = query.Encode()
 		path = parsed.RequestURI()
 	}
 	entry := runtime.LogEntry{Key: key, Method: e.Method, Path: path, StatusCode: r.StatusCode, Duration: r.Duration}
@@ -342,6 +370,27 @@ func executionLog(key runtime.Key, e model.EffectiveRequest, r model.Response, x
 		entry.ErrorCategory = x.Category
 	}
 	return entry
+}
+func sensitiveLogKey(name string) bool {
+	normalized := strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(name))
+	return strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "apikey") || normalized == "authorization" || normalized == "cookie"
+}
+func rejectSymlinkSegments(base, relative string) error {
+	current := base
+	for _, segment := range strings.Split(filepath.Clean(relative), string(filepath.Separator)) {
+		current = filepath.Join(current, segment)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("deletion target must not traverse a symlink")
+		}
+	}
+	return nil
 }
 func deletionPaths(target string, group bool) ([]string, error) {
 	info, err := os.Lstat(target)

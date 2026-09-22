@@ -6,9 +6,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"apitool/internal/app"
+	"apitool/internal/auth"
+	"apitool/internal/model"
 	"apitool/internal/runtime"
 )
 
@@ -154,6 +157,70 @@ func TestDuplicateAndDeleteExposeDistinctPathsBeforeMutation(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "payments/.api/requests/copies")); !os.IsNotExist(err) {
 		t.Fatalf("group still exists: %v", err)
+	}
+}
+
+func TestDeleteRejectsSymlinkedGroupWithoutTouchingExternalFiles(t *testing.T) {
+	root := requestWorkspace(t, "http://127.0.0.1:1")
+	external := t.TempDir()
+	sentinel := filepath.Join(external, "keep.yaml")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(root, "payments/.api/requests/linked")); err != nil {
+		t.Fatal(err)
+	}
+	service, _ := app.New(app.Dependencies{})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Delete(context.Background(), "payments", "linked", true, true); err == nil {
+		t.Fatal("Delete accepted symlink")
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("external file changed: %v", err)
+	}
+}
+
+func TestSaveAndDuplicateAreImmediatelySendable(t *testing.T) {
+	root := requestWorkspace(t, "http://old.example")
+	var urls []string
+	service, _ := app.New(app.Dependencies{Execute: func(_ context.Context, e model.EffectiveRequest, _ auth.TokenProvider) (model.Response, *model.ExecutionError) {
+		urls = append(urls, e.URL)
+		return model.Response{StatusCode: 200}, nil
+	}})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	request := model.Request{Name: "New", Method: "GET", Request: model.RequestConfig{URL: "http://new.example"}}
+	if err := service.SaveRequest(context.Background(), app.Selection{Collection: "payments", RequestID: "new"}, request); err != nil {
+		t.Fatal(err)
+	}
+	if result := service.Send(context.Background(), app.Selection{Collection: "payments", Environment: "test", RequestID: "new"}); result.Response == nil {
+		t.Fatalf("save send=%#v", result)
+	}
+	if _, err := service.DuplicateRequest(context.Background(), app.Selection{Collection: "payments", RequestID: "new"}, "copy"); err != nil {
+		t.Fatal(err)
+	}
+	if result := service.Send(context.Background(), app.Selection{Collection: "payments", Environment: "test", RequestID: "copy"}); result.Response == nil {
+		t.Fatalf("copy send=%#v", result)
+	}
+	if len(urls) != 2 || urls[0] != "http://new.example" || urls[1] != "http://new.example" {
+		t.Fatalf("urls=%v", urls)
+	}
+}
+
+func TestSendReturnsRedactedLogPath(t *testing.T) {
+	root := requestWorkspace(t, "http://example.test/path?access_token=secret&trace=ok")
+	service, _ := app.New(app.Dependencies{Execute: func(_ context.Context, _ model.EffectiveRequest, _ auth.TokenProvider) (model.Response, *model.ExecutionError) {
+		return model.Response{StatusCode: 200}, nil
+	}})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	result := service.Send(context.Background(), app.Selection{Collection: "payments", Environment: "test", RequestID: "check"})
+	if len(result.Logs) != 1 || strings.Contains(result.Logs[0].Path, "secret") || !strings.Contains(result.Logs[0].Path, "%5BREDACTED%5D") {
+		t.Fatalf("log=%#v", result.Logs)
 	}
 }
 

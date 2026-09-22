@@ -17,11 +17,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "apitool: %v\n", err)
 		os.Exit(2)
 	}
-	if _, err := newApplication(options); err != nil {
+	model, err := newApplication(options)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "apitool: initialize application: %v\n", err)
 		os.Exit(1)
 	}
+	if err := runProgram(model); err != nil {
+		fmt.Fprintf(os.Stderr, "apitool: run application: %v\n", err)
+		os.Exit(1)
+	}
 }
+
+var runProgram = func(model tea.Model) error { _, err := tea.NewProgram(model).Run(); return err }
 
 func newApplication(options startupOptions) (tea.Model, error) {
 	service, err := app.New(app.Dependencies{})
