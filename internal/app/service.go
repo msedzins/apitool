@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"apitool/internal/auth"
 	"apitool/internal/collection"
+	localgit "apitool/internal/git"
 	"apitool/internal/model"
 	"apitool/internal/resolve"
 	"apitool/internal/runtime"
@@ -25,13 +27,25 @@ import (
 type Dependencies struct {
 	TokenProvider auth.TokenProvider
 	OpenRuntime   func(string) (*runtime.Store, error)
+	OpenGit       func(string) GitRepository
 	Execute       func(context.Context, model.EffectiveRequest, auth.TokenProvider) (model.Response, *model.ExecutionError)
+}
+
+// GitRepository is the safe, text-oriented Git boundary used by the app.
+// Implementations must not stage files as a side effect of these methods.
+type GitRepository interface {
+	Status(context.Context) (string, error)
+	Diff(context.Context) (string, error)
+	Pull(context.Context) (string, error)
+	Push(context.Context) (string, error)
+	Commit(context.Context, string) (string, error)
 }
 
 type Service struct {
 	deps             Dependencies
 	opened           *Workspace
 	store            *runtime.Store
+	git              GitRepository
 	confirmDangerous bool
 }
 
@@ -82,6 +96,9 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.OpenRuntime == nil {
 		deps.OpenRuntime = runtime.Open
 	}
+	if deps.OpenGit == nil {
+		deps.OpenGit = func(root string) GitRepository { return localgit.New(root, exec.CommandContext) }
+	}
 	if deps.Execute == nil {
 		deps.Execute = transport.Execute
 	}
@@ -126,8 +143,48 @@ func (s *Service) OpenWorkspace(_ context.Context, start string, options OpenOpt
 			return Workspace{}, fmt.Errorf("collection %q not found", options.Collection)
 		}
 	}
-	s.opened, s.store, s.confirmDangerous = &opened, store, options.ConfirmDangerous
+	s.opened, s.store, s.git, s.confirmDangerous = &opened, store, s.deps.OpenGit(root), options.ConfirmDangerous
 	return opened, nil
+}
+
+func (s *Service) GitStatus(ctx context.Context) (string, error) {
+	repo, err := s.repository()
+	if err != nil {
+		return "", err
+	}
+	return repo.Status(ctx)
+}
+
+func (s *Service) GitDiff(ctx context.Context) (string, error) {
+	repo, err := s.repository()
+	if err != nil {
+		return "", err
+	}
+	return repo.Diff(ctx)
+}
+
+func (s *Service) GitPull(ctx context.Context) (string, error) {
+	repo, err := s.repository()
+	if err != nil {
+		return "", err
+	}
+	return repo.Pull(ctx)
+}
+
+func (s *Service) GitPush(ctx context.Context) (string, error) {
+	repo, err := s.repository()
+	if err != nil {
+		return "", err
+	}
+	return repo.Push(ctx)
+}
+
+func (s *Service) GitCommit(ctx context.Context, message string) (string, error) {
+	repo, err := s.repository()
+	if err != nil {
+		return "", err
+	}
+	return repo.Commit(ctx, message)
 }
 
 // TreeDiagnostics returns request-tree errors alongside collection load errors.
@@ -299,6 +356,13 @@ func (s *Service) collection(path string) (CollectionView, error) {
 		return CollectionView{}, fmt.Errorf("collection %q not found", path)
 	}
 	return view, nil
+}
+
+func (s *Service) repository() (GitRepository, error) {
+	if s.opened == nil || s.git == nil {
+		return nil, errors.New("workspace is not open")
+	}
+	return s.git, nil
 }
 func (s *Service) refreshTree(collectionPath string) error {
 	view, err := s.collection(collectionPath)
