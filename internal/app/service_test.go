@@ -96,6 +96,33 @@ func TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride(t *testing.
 	}
 }
 
+func TestOpenWorkspaceRestoresActiveCollectionPreference(t *testing.T) {
+	root := workspaceFixture(t)
+	writeCollection(t, root, "orders", "dev")
+	store, err := runtime.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveState(runtime.State{ActiveCollection: "orders", ExplorerWidth: 31}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.ActiveCollection != "orders" {
+		t.Fatalf("active collection = %q, want orders", opened.ActiveCollection)
+	}
+	preferences, err := service.UIPreferences()
+	if err != nil || preferences.ExplorerWidth != 31 {
+		t.Fatalf("preferences = %#v, %v", preferences, err)
+	}
+}
+
 func TestOpenWorkspaceIgnoresStaleStateAndScopesOverrideToSelectedCollection(t *testing.T) {
 	root := workspaceFixture(t)
 	writeCollection(t, root, "orders", "test")

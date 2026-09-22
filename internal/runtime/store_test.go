@@ -144,6 +144,23 @@ func TestStateIsEmptyWhenMissingAndPersistsOnlySessionPreferences(t *testing.T) 
 	}
 }
 
+func TestStatePersistsActiveCollectionAndExplorerWidth(t *testing.T) {
+	store, err := runtime.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveState(runtime.State{ActiveCollection: "payments", ExplorerWidth: 31}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ActiveCollection != "payments" || got.ExplorerWidth != 31 {
+		t.Fatalf("state = %#v, want active collection and width", got)
+	}
+}
+
 func TestOpenRejectsRuntimeDirectorySymlink(t *testing.T) {
 	workspace := t.TempDir()
 	external := t.TempDir()
