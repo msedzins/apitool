@@ -82,10 +82,10 @@ func (p *ClientCredentials) acquire(ctx context.Context, config model.Auth) (Tok
 		return Token{}, &OAuthError{Code: "token_request_invalid"}
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth(config.ClientID, config.ClientSecret)
+	req.SetBasicAuth(url.QueryEscape(config.ClientID), url.QueryEscape(config.ClientSecret))
 	response, err := p.client.Do(req)
 	if err != nil {
-		return Token{}, &OAuthError{Code: oauthTransportCode(err)}
+		return Token{}, &OAuthError{Code: oauthTransportCode(err), cause: err}
 	}
 	defer response.Body.Close()
 
@@ -100,7 +100,7 @@ func (p *ClientCredentials) acquire(ctx context.Context, config model.Auth) (Tok
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		if payload.Error != "" {
-			return Token{}, &OAuthError{Code: payload.Error}
+			return Token{}, &OAuthError{Code: safeOAuthCode(payload.Error)}
 		}
 		return Token{}, &OAuthError{Code: fmt.Sprintf("token_http_%d", response.StatusCode)}
 	}
@@ -111,6 +111,15 @@ func (p *ClientCredentials) acquire(ctx context.Context, config model.Auth) (Tok
 		payload.TokenType = "Bearer"
 	}
 	return Token{AccessToken: payload.AccessToken, TokenType: payload.TokenType, Expiry: time.Now().Add(time.Duration(payload.ExpiresIn) * time.Second)}, nil
+}
+
+func safeOAuthCode(code string) string {
+	switch code {
+	case "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client", "unsupported_grant_type", "invalid_scope", "server_error", "temporarily_unavailable":
+		return code
+	default:
+		return "oauth_error"
+	}
 }
 
 func cacheKey(config model.Auth) string {
@@ -131,9 +140,14 @@ func oauthTransportCode(err error) string {
 
 // OAuthError intentionally exposes just an OAuth-safe code, never an endpoint,
 // client credential, response body, or access token.
-type OAuthError struct{ Code string }
+type OAuthError struct {
+	Code  string
+	cause error
+}
 
-func (e *OAuthError) Error() string { return "OAuth token request failed: " + e.Code }
+func (e *OAuthError) Error() string { return "OAuth token request failed: " + safeOAuthCode(e.Code) }
+
+func (e *OAuthError) Unwrap() error { return e.cause }
 
 // Mask returns a stable placeholder that does not disclose any token bytes.
 func Mask(value string) string {

@@ -96,6 +96,46 @@ func TestOAuthInvalidClientDiagnosticIsRedacted(t *testing.T) {
 	}
 }
 
+func TestOAuthUntrustedErrorValueIsRedacted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"very-secret-token-123"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := auth.NewClientCredentials(server.Client()).Token(context.Background(), oauthConfig(server.URL, nil))
+	if err == nil {
+		t.Fatal("Token() error = nil, want safe OAuth error")
+	}
+	if got := err.Error(); strings.Contains(got, "very-secret-token-123") {
+		t.Errorf("Token() error leaked an untrusted token endpoint value: %q", got)
+	}
+	if got := err.Error(); !strings.Contains(got, "oauth_error") {
+		t.Errorf("Token() error = %q, want generic oauth_error code", got)
+	}
+}
+
+func TestClientCredentialsFormEncodesBasicCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, password, ok := r.BasicAuth()
+		if !ok {
+			t.Error("token request has no Basic authorization")
+		}
+		if user != "client%3A+id%2B%25%C3%A9" || password != "secret%3A+value%2B%25%C5%BC" {
+			t.Errorf("Basic credentials = %q, %q; want form-encoded values", user, password)
+		}
+		_, _ = w.Write([]byte(`{"access_token":"token-123","expires_in":3600}`))
+	}))
+	t.Cleanup(server.Close)
+
+	config := oauthConfig(server.URL, nil)
+	config.ClientID = "client: id+%é"
+	config.ClientSecret = "secret: value+%ż"
+	if _, err := auth.NewClientCredentials(server.Client()).Token(context.Background(), config); err != nil {
+		t.Fatalf("Token() error = %v", err)
+	}
+}
+
 func TestMaskDoesNotRevealValue(t *testing.T) {
 	if got := auth.Mask("token-123"); got == "token-123" || got == "" {
 		t.Errorf("Mask() = %q, want a non-empty masked value", got)

@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"apitool/internal/auth"
@@ -19,7 +21,14 @@ import (
 // ExecutionError.
 func Execute(ctx context.Context, effective model.EffectiveRequest, tokenProvider auth.TokenProvider) (model.Response, *model.ExecutionError) {
 	started := time.Now()
-	request, buildError := buildRequest(ctx, effective)
+	executionContext := ctx
+	cancel := func() {}
+	if effective.Timeout > 0 {
+		executionContext, cancel = context.WithTimeout(ctx, effective.Timeout)
+	}
+	defer cancel()
+
+	request, buildError := buildRequest(executionContext, effective)
 	if buildError != nil {
 		return model.Response{}, buildError
 	}
@@ -27,13 +36,9 @@ func Execute(ctx context.Context, effective model.EffectiveRequest, tokenProvide
 		if tokenProvider == nil {
 			return model.Response{}, safeError(model.StageOAuth, model.CategoryOAuth, "OAuth token provider unavailable")
 		}
-		token, err := tokenProvider.Token(ctx, *effective.Auth)
+		token, err := tokenProvider.Token(executionContext, *effective.Auth)
 		if err != nil {
-			message := "OAuth token acquisition failed"
-			if oauthError, ok := err.(*auth.OAuthError); ok {
-				message = oauthError.Error()
-			}
-			return model.Response{}, safeError(model.StageOAuth, model.CategoryOAuth, message)
+			return model.Response{}, oauthExecutionError(executionContext, err)
 		}
 		request.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	}
@@ -68,6 +73,9 @@ func buildRequest(ctx context.Context, effective model.EffectiveRequest) (*http.
 		query.Set(key, value)
 	}
 	parsed.RawQuery = query.Encode()
+	if headerError := validateHeaders(effective.Headers); headerError != nil {
+		return nil, headerError
+	}
 	request, err := http.NewRequestWithContext(ctx, effective.Method, parsed.String(), bytes.NewReader(effective.Body))
 	if err != nil {
 		return nil, safeError(model.StageRequestBuild, model.CategoryRequestBuild, "HTTP request is invalid")
@@ -76,6 +84,32 @@ func buildRequest(ctx context.Context, effective model.EffectiveRequest) (*http.
 		request.Header.Set(key, value)
 	}
 	return request, nil
+}
+
+func validateHeaders(headers map[string]string) *model.ExecutionError {
+	seen := make(map[string]struct{}, len(headers))
+	for name := range headers {
+		canonical := strings.ToLower(name)
+		if _, duplicate := seen[canonical]; duplicate {
+			return safeError(model.StageRequestBuild, model.CategoryRequestBuild, "Request headers contain duplicate names")
+		}
+		seen[canonical] = struct{}{}
+	}
+	return nil
+}
+
+func oauthExecutionError(ctx context.Context, err error) *model.ExecutionError {
+	if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		return safeError(model.StageOAuth, model.CategoryCanceled, "OAuth token request canceled")
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return safeError(model.StageOAuth, model.CategoryTimeout, "OAuth token request timed out")
+	}
+	message := "OAuth token acquisition failed"
+	if oauthError, ok := err.(*auth.OAuthError); ok {
+		message = oauthError.Error()
+	}
+	return safeError(model.StageOAuth, model.CategoryOAuth, message)
 }
 
 func httpClient(effective model.EffectiveRequest) *http.Client {

@@ -87,6 +87,83 @@ func TestExecuteClassifiesTimeoutWithoutLeakingRequestURL(t *testing.T) {
 	}
 }
 
+func TestExecuteAppliesEffectiveTimeoutToTokenAcquisition(t *testing.T) {
+	resourceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(resourceServer.Close)
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(40 * time.Millisecond):
+			_, _ = w.Write([]byte(`{"access_token":"late-token","expires_in":3600}`))
+		}
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	effective := request(resourceServer.URL)
+	effective.Timeout = 10 * time.Millisecond
+	effective.Auth = &model.Auth{
+		Type: "oauth2", Grant: "client_credentials", TokenURL: tokenServer.URL,
+		ClientID: "client-id", ClientSecret: "very-secret",
+	}
+	_, executionError := transport.Execute(context.Background(), effective, auth.NewClientCredentials(tokenServer.Client()))
+	if executionError == nil || executionError.Stage != model.StageOAuth || executionError.Category != model.CategoryTimeout {
+		t.Fatalf("Execute() token acquisition error = %#v, want OAuth timeout", executionError)
+	}
+	if strings.Contains(executionError.SafeMessage, "very-secret") {
+		t.Errorf("OAuth timeout safe message leaked secret: %q", executionError.SafeMessage)
+	}
+}
+
+func TestExecuteDoesNotExposeUntrustedOAuthErrorInSafeMessage(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"token-endpoint-secret"}`))
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	effective := request("http://api.example.test")
+	effective.Auth = &model.Auth{
+		Type: "oauth2", Grant: "client_credentials", TokenURL: tokenServer.URL,
+		ClientID: "client-id", ClientSecret: "very-secret",
+	}
+	_, executionError := transport.Execute(context.Background(), effective, auth.NewClientCredentials(tokenServer.Client()))
+	if executionError == nil || executionError.Category != model.CategoryOAuth {
+		t.Fatalf("Execute() OAuth error = %#v, want OAuth diagnostic", executionError)
+	}
+	if strings.Contains(executionError.SafeMessage, "token-endpoint-secret") || strings.Contains(executionError.SafeMessage, "very-secret") {
+		t.Errorf("OAuth safe message leaked token endpoint or client secret: %q", executionError.SafeMessage)
+	}
+}
+
+func TestExecuteClassifiesCanceledGenericTokenProvider(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	effective := request("http://api.example.test")
+	effective.Auth = &model.Auth{Type: "oauth2", Grant: "client_credentials"}
+	_, executionError := transport.Execute(ctx, effective, genericErrorProvider{})
+	if executionError == nil || executionError.Stage != model.StageOAuth || executionError.Category != model.CategoryCanceled {
+		t.Fatalf("Execute() token acquisition error = %#v, want OAuth cancellation", executionError)
+	}
+	if strings.Contains(executionError.SafeMessage, "very-secret") {
+		t.Errorf("OAuth cancellation safe message leaked provider value: %q", executionError.SafeMessage)
+	}
+}
+
+func TestExecuteRejectsCaseInsensitiveDuplicateHeaders(t *testing.T) {
+	effective := request("http://api.example.test")
+	effective.Headers = map[string]string{"X-Trace": "one", "x-trace": "two"}
+	_, executionError := transport.Execute(context.Background(), effective, nil)
+	if executionError == nil || executionError.Stage != model.StageRequestBuild || executionError.Category != model.CategoryRequestBuild {
+		t.Fatalf("Execute() duplicate-header error = %#v, want request-build diagnostic", executionError)
+	}
+	if strings.Contains(executionError.SafeMessage, "one") || strings.Contains(executionError.SafeMessage, "two") {
+		t.Errorf("duplicate-header safe message leaked values: %q", executionError.SafeMessage)
+	}
+}
+
 func TestExecuteAuthNoneOmitsAuthorizationAndPreservesRawBody(t *testing.T) {
 	wantBody := []byte("<entry> unchanged \n</entry>")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +244,12 @@ type failingProvider struct{}
 
 func (failingProvider) Token(context.Context, model.Auth) (auth.Token, error) {
 	return auth.Token{}, errors.New("provider must not be called")
+}
+
+type genericErrorProvider struct{}
+
+func (genericErrorProvider) Token(context.Context, model.Auth) (auth.Token, error) {
+	return auth.Token{}, errors.New("very-secret")
 }
 
 var _ = tls.VersionTLS13
