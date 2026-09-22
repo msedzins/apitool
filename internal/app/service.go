@@ -36,13 +36,15 @@ type Service struct {
 }
 
 type OpenOptions struct {
+	Collection       string
 	Environment      string
 	ConfirmDangerous bool
 }
 
 type Workspace struct {
-	Root        string
-	Collections map[string]CollectionView
+	Root             string
+	Collections      map[string]CollectionView
+	ActiveCollection string
 }
 type CollectionView struct {
 	Path         string
@@ -99,23 +101,30 @@ func (s *Service) OpenWorkspace(_ context.Context, start string, options OpenOpt
 	if err != nil {
 		return Workspace{}, err
 	}
-	opened := Workspace{Root: root, Collections: map[string]CollectionView{}}
+	opened := Workspace{Root: root, Collections: map[string]CollectionView{}, ActiveCollection: options.Collection}
 	for _, found := range workspace.Discover(root) {
 		view := CollectionView{Path: found.Path, Root: found.Root, Collection: found.Collection, Diagnostics: append([]model.Diagnostic(nil), found.Diagnostics...), Environments: loadEnvironments(found.Root)}
 		var treeDiagnostics []model.Diagnostic
 		view.Tree, treeDiagnostics = collection.BuildTree(found.Root)
 		view.Diagnostics = append(view.Diagnostics, treeDiagnostics...)
 		environment := state.LastActiveEnvironment[found.Path]
-		if options.Environment != "" {
+		if options.Environment != "" && options.Collection == found.Path {
 			environment = options.Environment
 		}
 		if environment != "" {
-			if _, ok := view.Environments[environment]; !ok {
+			if _, ok := view.Environments[environment]; !ok && options.Environment != "" && options.Collection == found.Path {
 				return Workspace{}, fmt.Errorf("collection %q has no environment %q", found.Path, environment)
 			}
-			view.Environment = environment
+			if _, ok := view.Environments[environment]; ok {
+				view.Environment = environment
+			}
 		}
 		opened.Collections[found.Path] = view
+	}
+	if options.Collection != "" {
+		if _, ok := opened.Collections[options.Collection]; !ok {
+			return Workspace{}, fmt.Errorf("collection %q not found", options.Collection)
+		}
 	}
 	s.opened, s.store, s.confirmDangerous = &opened, store, options.ConfirmDangerous
 	return opened, nil

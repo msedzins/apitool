@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+
+	"apitool/internal/app"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -21,7 +24,19 @@ func main() {
 }
 
 func newApplication(options startupOptions) (tea.Model, error) {
-	return appModel{options: options}, nil
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		return nil, err
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	opened, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: options.Collection, Environment: options.Environment, ConfirmDangerous: options.ConfirmDangerous})
+	if err != nil {
+		return nil, err
+	}
+	return appModel{options: options, service: service, workspace: opened, selectedCollection: options.Collection}, nil
 }
 
 type startupOptions struct {
@@ -49,7 +64,12 @@ func parseStartupOptions(arguments []string) (startupOptions, error) {
 	return options, nil
 }
 
-type appModel struct{ options startupOptions }
+type appModel struct {
+	options            startupOptions
+	service            *app.Service
+	workspace          app.Workspace
+	selectedCollection string
+}
 
 func (appModel) Init() tea.Cmd { return nil }
 

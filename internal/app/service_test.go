@@ -33,12 +33,38 @@ func TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride(t *testing.
 	if got := opened.Collections["payments"].Environment; got != "test" {
 		t.Fatalf("restored environment = %q, want test", got)
 	}
-	opened, err = service.OpenWorkspace(context.Background(), root, app.OpenOptions{Environment: "prod"})
+	opened, err = service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: "payments", Environment: "prod"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := opened.Collections["payments"].Environment; got != "prod" {
 		t.Fatalf("override environment = %q, want prod", got)
+	}
+}
+
+func TestOpenWorkspaceIgnoresStaleStateAndScopesOverrideToSelectedCollection(t *testing.T) {
+	root := workspaceFixture(t)
+	writeCollection(t, root, "orders", "test")
+	store, err := runtime.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveState(runtime.State{LastActiveEnvironment: map[string]string{"payments": "missing", "orders": "test"}}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: "payments", Environment: "prod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := opened.Collections["payments"].Environment; got != "prod" {
+		t.Fatalf("payments = %q, want prod", got)
+	}
+	if got := opened.Collections["orders"].Environment; got != "test" {
+		t.Fatalf("orders = %q, want test", got)
 	}
 }
 
@@ -168,4 +194,18 @@ func requestWorkspace(t *testing.T, endpoint string) string {
 	write("payments/.api/requests/check.yaml", "name: Check\nmethod: GET\nrequest:\n  url: "+endpoint+"\n")
 	write("payments/.api/requests/remove.yaml", "name: Remove\nmethod: DELETE\nrequest:\n  url: "+endpoint+"\n")
 	return root
+}
+
+func writeCollection(t *testing.T, root, name, environment string) {
+	t.Helper()
+	dir := filepath.Join(root, name, ".api", "environments")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, name, ".api", "collection.yaml"), []byte("name: "+name+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, environment+".yaml"), []byte("name: "+environment+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
