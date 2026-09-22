@@ -27,10 +27,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.explorer = clampExplorer(m.explorer, m.width)
 		m.savePreferences()
 	case tea.KeyMsg:
+		if x.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
 		m.handleKey(x)
 	case tea.MouseMsg:
 		m.handleMouse(x)
 	}
+	m.syncViewport()
 	return m, nil
 }
 func (m *Model) handleKey(k tea.KeyMsg) {
@@ -155,7 +159,10 @@ func (m *Model) handleEnvironmentPicker(k tea.KeyMsg) {
 		m.environmentIndex = wrap(m.environmentIndex+1, len(envs))
 	}
 }
-func (m *Model) moveTree(d int) { m.treeIndex = wrap(m.treeIndex+d, len(m.visibleRows())) }
+func (m *Model) moveTree(d int) {
+	m.treeIndex = wrap(m.treeIndex+d, len(m.visibleRows()))
+	m.syncViewport()
+}
 func (m *Model) clampTreeIndex() {
 	n := len(m.visibleRows())
 	if n == 0 {
@@ -163,6 +170,7 @@ func (m *Model) clampTreeIndex() {
 	} else if m.treeIndex >= n {
 		m.treeIndex = n - 1
 	}
+	m.syncViewport()
 }
 func (m *Model) openSelected() {
 	rows := m.visibleRows()
@@ -197,7 +205,7 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 	}
 	if x.X < m.explorerWidth() {
 		m.focus = collectionPane
-		row := x.Y - 2
+		row := x.Y - 2 + m.treeOffset
 		rows := m.visibleRows()
 		if row >= 0 && row < len(rows) {
 			m.treeIndex = row
@@ -208,6 +216,35 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 	} else {
 		m.focus = responsePane
 	}
+}
+func (m *Model) syncViewport() {
+	rows := len(m.visibleRows())
+	capacity := m.explorerCapacity()
+	if m.treeIndex < m.treeOffset {
+		m.treeOffset = m.treeIndex
+	}
+	if m.treeIndex >= m.treeOffset+capacity {
+		m.treeOffset = m.treeIndex - capacity + 1
+	}
+	maxOffset := rows - capacity
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.treeOffset < 0 {
+		m.treeOffset = 0
+	}
+	if m.treeOffset > maxOffset {
+		m.treeOffset = maxOffset
+	}
+}
+func (m Model) explorerCapacity() int {
+	if m.height <= 0 {
+		return 22
+	}
+	if m.height-2 < 1 {
+		return 1
+	}
+	return m.height - 2
 }
 func (m *Model) openSearchSelection() {
 	rows := m.searchRows()

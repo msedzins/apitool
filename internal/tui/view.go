@@ -143,7 +143,13 @@ func (m Model) selectedRequest() string {
 }
 func (m Model) treeLines() []string {
 	lines := []string{"Explorer", "> " + m.collection}
-	for i, row := range m.visibleRows() {
+	rows := m.visibleRows()
+	end := m.treeOffset + m.explorerCapacity()
+	if end > len(rows) {
+		end = len(rows)
+	}
+	for i := m.treeOffset; i < end; i++ {
+		row := rows[i]
 		p := "  "
 		if i == m.treeIndex {
 			p = "> "

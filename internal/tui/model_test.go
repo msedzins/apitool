@@ -2,6 +2,7 @@ package tui_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,6 +143,9 @@ func fixtureService(t *testing.T) *app.Service {
 	write("orders/.api/collection.yaml", "name: Orders\n")
 	write("orders/.api/environments/dev.yaml", "name: dev\n")
 	write("orders/.api/requests/list.yaml", "name: List\nmethod: GET\nrequest:\n  url: https://example.test/orders\n")
+	for i := range 10 {
+		write(fmt.Sprintf("payments/.api/requests/z%d.yaml", i), fmt.Sprintf("name: Z%d\nmethod: GET\nrequest:\n  url: https://example.test/z%d\n", i, i))
+	}
 	service, err := app.New(app.Dependencies{})
 	if err != nil {
 		t.Fatal(err)

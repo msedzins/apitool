@@ -45,11 +45,13 @@ type Model struct {
 	collections                                  []string
 	collection                                   string
 	collectionIndex, environmentIndex, treeIndex int
+	treeOffset                                   int
 	focus                                        pane
 	mode                                         mode
 	vim                                          bool
 	color                                        bool
 	query                                        string
+	pendingEnvironment                           string
 	expanded                                     map[string]bool
 	width                                        int
 	height                                       int
@@ -59,7 +61,7 @@ type Model struct {
 
 // New creates a shell around a workspace already opened by service.
 func New(service *app.Service, options Options) tea.Model {
-	m := Model{service: service, vim: options.VimMode, color: options.Color, expanded: map[string]bool{}}
+	m := Model{service: service, vim: options.VimMode, color: options.Color, expanded: map[string]bool{}, pendingEnvironment: options.StartingEnvironment}
 	if service == nil {
 		m.message = "No workspace is open"
 		return m
@@ -85,9 +87,6 @@ func New(service *app.Service, options Options) tea.Model {
 	}
 	if options.StartingCollection != "" {
 		m.openCollection(options.StartingCollection)
-		if options.StartingEnvironment != "" && m.collection != "" {
-			m.selectEnvironment(options.StartingEnvironment)
-		}
 	}
 	return m
 }
@@ -103,6 +102,11 @@ func (m *Model) openCollection(path string) {
 	m.collection, m.view, m.treeIndex, m.focus, m.mode = path, view, 0, collectionPane, browseMode
 	for _, group := range view.Tree.Groups {
 		m.expanded[group.ID] = true
+	}
+	if m.pendingEnvironment != "" {
+		environment := m.pendingEnvironment
+		m.pendingEnvironment = ""
+		m.selectEnvironment(environment)
 	}
 	_ = m.service.SaveUIPreferences(path, m.explorer)
 }
