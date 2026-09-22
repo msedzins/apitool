@@ -5,15 +5,66 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"apitool/internal/app"
 	"apitool/internal/auth"
+	"apitool/internal/git"
 	"apitool/internal/model"
 	"apitool/internal/runtime"
 )
+
+func TestGitCommandsExposeSafeTextResultsWithoutStagingRuntimeFiles(t *testing.T) {
+	root := realGitWorkspace(t)
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := service.GitStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, " M ") || strings.Contains(status, ".apitool") {
+		t.Fatalf("status = %q, want tracked modification without runtime files", status)
+	}
+	diff, err := service.GitDiff(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "workspace change") {
+		t.Fatalf("diff = %q, want workspace change", diff)
+	}
+}
+
+func TestGitCommitUsesOnlyAlreadyStagedChanges(t *testing.T) {
+	root := realGitWorkspace(t)
+	service, _ := app.New(app.Dependencies{})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.GitCommit(context.Background(), "unstaged"); err == nil {
+		t.Fatal("GitCommit accepted an unstaged change")
+	}
+	stage := exec.Command("git", "add", "workspace.txt")
+	stage.Dir = root
+	if output, err := stage.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	if _, err := service.GitCommit(context.Background(), "staged change"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git.New(root, exec.CommandContext).Status(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride(t *testing.T) {
 	root := workspaceFixture(t)
@@ -275,4 +326,36 @@ func writeCollection(t *testing.T, root, name, environment string) {
 	if err := os.WriteFile(filepath.Join(dir, environment+".yaml"), []byte("name: "+environment+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func realGitWorkspace(t *testing.T) string {
+	t.Helper()
+	root := workspaceFixture(t)
+	write := func(name, data string) {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".gitignore", ".apitool/\n")
+	write("workspace.txt", "original\n")
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	run("init", "-q")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test User")
+	run("add", ".")
+	run("commit", "-qm", "initial")
+	write("workspace.txt", "workspace change\n")
+	return root
 }
