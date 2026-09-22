@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -44,6 +45,16 @@ func (s *Store) AppendLog(entry LogEntry) error {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
+	host, err := safeHostname(entry.Host)
+	if err != nil {
+		return err
+	}
+	oauthEndpointHost, err := safeHostname(entry.OAuthEndpointHost)
+	if err != nil {
+		return err
+	}
+	entry.Host = host
+	entry.OAuthEndpointHost = oauthEndpointHost
 	path, err := redactPath(entry.Path)
 	if err != nil {
 		return err
@@ -62,6 +73,47 @@ func (s *Store) AppendLog(entry LogEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.appendFile(filepath.Join("logs", "executions.jsonl"), encoded)
+}
+
+// safeHostname accepts a bare DNS name, IP address, or host:port and returns
+// only a normalized hostname. URLs and any authority/path/query/fragment data
+// are rejected rather than partially redacted before logging.
+func safeHostname(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	if strings.TrimSpace(value) != value {
+		return "", errors.New("log host contains whitespace")
+	}
+	parsed, err := url.Parse("//" + value)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("log host must be a hostname")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" || credentialKey(host) {
+		return "", errors.New("log host is unsafe")
+	}
+	if net.ParseIP(host) == nil && !validDNSHostname(host) {
+		return "", errors.New("log host must be a valid DNS name")
+	}
+	return host, nil
+}
+
+func validDNSHostname(host string) bool {
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // RedactHeaders returns a copy of headers with credentials and cookies removed.

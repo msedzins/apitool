@@ -111,3 +111,39 @@ func TestAppendLogRejectsUnstructuredDataAndUnsafeURLParts(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendLogRejectsUnsafeDirectHostFields(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "users/list"}
+	for name, entry := range map[string]runtime.LogEntry{
+		"host token":         {Key: key, Method: "GET", Host: "access-token-123"},
+		"host URL":           {Key: key, Method: "GET", Host: "https://api.example.test/items?access_token=query-token-456"},
+		"oauth authority":    {Key: key, Method: "GET", OAuthEndpointHost: "user:client-secret-789@auth.example.test"},
+		"oauth URL fragment": {Key: key, Method: "GET", OAuthEndpointHost: "https://auth.example.test#access_token=fragment-token-000"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := store.AppendLog(entry); err == nil {
+				t.Fatal("AppendLog() error = nil, want unsafe host field rejected")
+			}
+		})
+	}
+	if err := store.AppendLog(runtime.LogEntry{Key: key, Method: "GET", Host: "API.Example.Test:443", OAuthEndpointHost: "auth.example.test"}); err != nil {
+		t.Fatalf("AppendLog() valid hosts error = %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(workspace, ".apitool", "logs", "executions.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unsafe := range [][]byte{[]byte("access-token-123"), []byte("query-token-456"), []byte("client-secret-789"), []byte("fragment-token-000"), []byte(":443")} {
+		if bytes.Contains(raw, unsafe) {
+			t.Errorf("log contains unsafe host input %q: %s", unsafe, raw)
+		}
+	}
+	if !bytes.Contains(raw, []byte(`"host":"api.example.test"`)) || !bytes.Contains(raw, []byte(`"oauth_endpoint_host":"auth.example.test"`)) {
+		t.Errorf("log = %s, want normalized hostname-only fields", raw)
+	}
+}
