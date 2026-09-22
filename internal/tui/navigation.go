@@ -24,10 +24,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = x.Width, x.Height
-		if m.explorer == 0 {
-			m.explorer = m.explorerWidth()
-		}
-		_ = m.service.SaveUIPreferences(m.collection, m.explorer)
+		m.explorer = clampExplorer(m.explorer, m.width)
+		m.savePreferences()
 	case tea.KeyMsg:
 		m.handleKey(x)
 	case tea.MouseMsg:
@@ -81,17 +79,13 @@ func (m *Model) handleKey(k tea.KeyMsg) {
 }
 
 func (m *Model) resizeExplorer(delta int) {
-	if m.explorer == 0 {
-		m.explorer = m.explorerWidth()
+	m.explorer = clampExplorer(m.explorer+delta, m.width)
+	m.savePreferences()
+}
+func (m *Model) savePreferences() {
+	if m.service != nil {
+		_ = m.service.SaveUIPreferences(m.collection, m.explorer)
 	}
-	m.explorer += delta
-	if m.explorer < 24 {
-		m.explorer = 24
-	}
-	if m.width > 0 && m.explorer > m.width-20 {
-		m.explorer = m.width - 20
-	}
-	_ = m.service.SaveUIPreferences(m.collection, m.explorer)
 }
 func (m *Model) handleRune(s string) {
 	if s == "/" {
@@ -117,8 +111,7 @@ func (m *Model) handleSearch(k tea.KeyMsg) {
 	case tea.KeyEsc:
 		m.mode, m.query, m.treeIndex = browseMode, "", 0
 	case tea.KeyEnter:
-		m.mode = browseMode
-		m.clampTreeIndex()
+		m.openSearchSelection()
 	case tea.KeyBackspace:
 		if n := len(m.query); n > 0 {
 			m.query = m.query[:n-1]
@@ -216,6 +209,20 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 		m.focus = responsePane
 	}
 }
+func (m *Model) openSearchSelection() {
+	rows := m.searchRows()
+	if m.treeIndex < 0 || m.treeIndex >= len(rows) {
+		m.mode = browseMode
+		return
+	}
+	id := rows[m.treeIndex].id
+	for _, group := range m.view.Tree.Requests[id].Groups {
+		m.expanded[group.ID] = true
+	}
+	m.mode = browseMode
+	m.treeIndex = indexRow(m.visibleRows(), id)
+	m.focus, m.message = requestPane, "Request: "+id
+}
 func (m Model) environmentNames() []string {
 	r := make([]string, 0, len(m.view.Environments))
 	for n := range m.view.Environments {
@@ -225,15 +232,18 @@ func (m Model) environmentNames() []string {
 	return r
 }
 func (m Model) visibleRows() []treeRow {
+	if m.mode == searchMode {
+		return m.searchRows()
+	}
 	var r []treeRow
 	for _, g := range m.view.Tree.Groups {
-		if p := parent(g.ID); p != "" && !m.expanded[p] {
+		if !m.ancestorsExpanded(g.ID) {
 			continue
 		}
 		r = append(r, treeRow{g.ID, groupRow})
 	}
 	for _, id := range m.view.Tree.RequestIDs {
-		if !m.requestVisible(id) || (m.query != "" && !strings.Contains(strings.ToLower(id), strings.ToLower(m.query))) {
+		if !m.requestVisible(id) {
 			continue
 		}
 		r = append(r, treeRow{id, requestRow})
@@ -244,9 +254,59 @@ func (m Model) visibleRows() []treeRow {
 	}
 	sort.Strings(bad)
 	for _, id := range bad {
+		if !m.ancestorsExpanded(id) {
+			continue
+		}
 		r = append(r, treeRow{id, invalidRow})
 	}
 	return r
+}
+func (m Model) searchRows() []treeRow {
+	var r []treeRow
+	for _, id := range m.view.Tree.RequestIDs {
+		if strings.Contains(strings.ToLower(id), strings.ToLower(m.query)) {
+			r = append(r, treeRow{id, requestRow})
+		}
+	}
+	return r
+}
+func (m Model) ancestorsExpanded(id string) bool {
+	for p := parent(id); p != ""; p = parent(p) {
+		if !m.expanded[p] {
+			return false
+		}
+	}
+	return true
+}
+func indexRow(rows []treeRow, id string) int {
+	for i, row := range rows {
+		if row.id == id {
+			return i
+		}
+	}
+	return 0
+}
+func clampExplorer(value, width int) int {
+	if width <= 0 {
+		if value < 24 {
+			return 24
+		}
+		return value
+	}
+	max := width - 10
+	if max < 1 {
+		max = 1
+	}
+	if value == 0 {
+		value = width / 3
+	}
+	if value < 24 && width >= 34 {
+		value = 24
+	}
+	if value > max {
+		value = max
+	}
+	return value
 }
 func parent(id string) string {
 	if i := strings.LastIndex(id, "/"); i >= 0 {

@@ -59,7 +59,7 @@ func (m Model) View() string {
 }
 func (m Model) explorerWidth() int {
 	if m.explorer > 0 {
-		return m.explorer
+		return clampExplorer(m.explorer, m.width)
 	}
 	w := m.width
 	if w == 0 {
@@ -82,8 +82,8 @@ func spatial(left, top, bottom []string, leftW, width, height int) string {
 		height = 24
 	}
 	rightW := width - leftW - 1
-	if rightW < 20 {
-		rightW = 20
+	if rightW < 1 {
+		rightW = 1
 	}
 	topH := height / 2
 	lines := make([]string, 0, height)

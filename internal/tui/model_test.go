@@ -43,6 +43,8 @@ func TestCollectionSwitchChangesTreeAndEnvironment(t *testing.T) {
 func TestInvalidRequestHasWarningWhileValidSiblingOpens(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.View(); !containsAll(got, "warning", "check") {
 		t.Fatalf("tree View() = %q, want warning and valid sibling", got)
@@ -80,11 +82,15 @@ func TestTabCyclesPanes(t *testing.T) {
 func TestVimNavigationIsOptIn(t *testing.T) {
 	withoutVim := tui.New(fixtureService(t), tui.Options{})
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
+	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
+	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if got := withoutVim.View(); !containsAll(got, "Request: billing/nested") {
 		t.Fatalf("default View() = %q, want selection unchanged", got)
 	}
 	withVim := tui.New(fixtureService(t), tui.Options{VimMode: true})
+	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyDown})
+	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if got := withVim.View(); !containsAll(got, "Request: check") {
@@ -130,6 +136,9 @@ func fixtureService(t *testing.T) *app.Service {
 	write("payments/.api/requests/second.yaml", "name: Second\nmethod: GET\nrequest:\n  url: https://example.test/second\n")
 	write("payments/.api/requests/broken.yaml", "name: Broken\nmethod: GET\n")
 	write("payments/.api/requests/billing/nested.yaml", "name: Nested\nmethod: GET\nrequest:\n  url: https://example.test/nested\n")
+	write("payments/.api/requests/billing/bad.yaml", "name: Bad\nmethod: GET\n")
+	write("payments/.api/requests/billing/deep/item.yaml", "name: Item\nmethod: GET\nrequest:\n  url: https://example.test/item\n")
+	write("payments/.api/requests/billing/deep/bad.yaml", "name: Deep Bad\nmethod: GET\n")
 	write("orders/.api/collection.yaml", "name: Orders\n")
 	write("orders/.api/environments/dev.yaml", "name: dev\n")
 	write("orders/.api/requests/list.yaml", "name: List\nmethod: GET\nrequest:\n  url: https://example.test/orders\n")

@@ -67,8 +67,63 @@ func TestCtrlArrowsResizeExplorerSplitter(t *testing.T) {
 func TestMousePressSelectsClickedTreeRow(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 24})
-	m, _ = m.Update(tea.MouseMsg{X: 2, Y: 4, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m, _ = m.Update(tea.MouseMsg{X: 2, Y: 6, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
 	if got := m.View(); !strings.Contains(got, "Request: check") {
 		t.Fatalf("mouse selection = %q, want clicked check request", got)
+	}
+}
+
+func TestWindowResizeClampsPersistedSplitter(t *testing.T) {
+	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 24})
+	for range 8 {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	}
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 30, Height: 12})
+	if divider := strings.Index(m.View(), "│"); divider >= 30 || divider < 1 {
+		t.Fatalf("divider = %d after narrow resize, want within terminal width", divider)
+	}
+}
+
+func TestSearchEnterOpensMatchingRequestEvenWhenItsGroupIsCollapsed(t *testing.T) {
+	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("nested")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := m.View(); !strings.Contains(got, "Request: billing/nested") || !strings.Contains(got, "Focus: request") {
+		t.Fatalf("search enter = %q, want matching request opened", got)
+	}
+}
+
+func TestCollapsedAncestorHidesNestedGroupAndInvalidDescendant(t *testing.T) {
+	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if got := m.View(); strings.Contains(got, "billing/nested") || strings.Contains(got, "billing/bad") || strings.Contains(got, "billing/deep") {
+		t.Fatalf("collapsed tree = %q, should hide nested descendants", got)
+	}
+}
+
+func TestStatusViewCategoriesRemainTextualWithoutColor(t *testing.T) {
+	for _, tc := range []struct {
+		code     int
+		category string
+	}{{200, "success"}, {302, "redirect"}, {404, "client error"}, {500, "server error"}, {0, "warning"}} {
+		t.Run(tc.category, func(t *testing.T) {
+			plain := tui.StatusView(tui.Status{Code: tc.code}, false)
+			colored := tui.StatusView(tui.Status{Code: tc.code}, true)
+			if !strings.Contains(plain, tc.category) || !strings.Contains(colored, tc.category) {
+				t.Fatalf("status = %q / %q, want %q", plain, colored, tc.category)
+			}
+		})
+	}
+}
+
+func TestNilServiceHandlesResizeAndSplitterEvents(t *testing.T) {
+	m := tui.New(nil, tui.Options{})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 30, Height: 12})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	if got := m.View(); !strings.Contains(got, "No workspace") {
+		t.Fatalf("nil service view = %q", got)
 	}
 }
