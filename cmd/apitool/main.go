@@ -11,6 +11,7 @@ import (
 	"apitool/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/muesli/termenv"
 )
 
 func main() {
@@ -38,7 +39,10 @@ func run(arguments []string) error {
 	return nil
 }
 
-var runProgram = func(model tea.Model) error { _, err := tea.NewProgram(model).Run(); return err }
+var runProgram = func(model tea.Model) error {
+	_, err := tea.NewProgram(model, tea.WithMouseCellMotion()).Run()
+	return err
+}
 
 func newApplication(options startupOptions) (tea.Model, error) {
 	service, err := app.New(app.Dependencies{})
@@ -56,8 +60,11 @@ func newApplication(options startupOptions) (tea.Model, error) {
 		StartingCollection:  options.Collection,
 		StartingEnvironment: options.Environment,
 		ConfirmDangerous:    options.ConfirmDangerous,
+		Color:               colorEnabled(termenv.EnvColorProfile()),
 	}), nil
 }
+
+func colorEnabled(profile termenv.Profile) bool { return profile != termenv.Ascii }
 
 type startupOptions struct {
 	Collection, Environment string

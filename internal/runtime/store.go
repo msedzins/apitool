@@ -38,6 +38,8 @@ type Store struct {
 type State struct {
 	LastActiveEnvironment map[string]string `json:"last_active_environment"`
 	PanelPreferences      map[string]bool   `json:"panel_preferences"`
+	ActiveCollection      string            `json:"active_collection,omitempty"`
+	ExplorerWidth         int               `json:"explorer_width,omitempty"`
 }
 
 type cachedResponse struct {
@@ -139,6 +141,12 @@ func (s *Store) SaveState(state State) error {
 		for panel, preference := range state.PanelPreferences {
 			existing.PanelPreferences[panel] = preference
 		}
+		if state.ActiveCollection != "" {
+			existing.ActiveCollection = state.ActiveCollection
+		}
+		if state.ExplorerWidth != 0 {
+			existing.ExplorerWidth = state.ExplorerWidth
+		}
 		data, err := json.Marshal(existing)
 		if err != nil {
 			return fmt.Errorf("encode runtime state: %w", err)
@@ -191,6 +199,14 @@ func (s *State) ensureMaps() {
 	}
 }
 func validateState(state State) error {
+	if state.ActiveCollection != "" {
+		if _, err := safePath(state.ActiveCollection, "active collection", true); err != nil {
+			return err
+		}
+	}
+	if state.ExplorerWidth < 0 || state.ExplorerWidth > 10000 {
+		return errors.New("explorer width is invalid")
+	}
 	for collection, environment := range state.LastActiveEnvironment {
 		if _, err := safePath(collection, "state collection path", true); err != nil {
 			return err

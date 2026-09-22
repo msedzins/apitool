@@ -2,183 +2,269 @@ package tui
 
 import (
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type rowKind int
+
+const (
+	groupRow rowKind = iota
+	requestRow
+	invalidRow
+)
+
+type treeRow struct {
+	id   string
+	kind rowKind
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch message := msg.(type) {
+	switch x := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = message.Width, message.Height
+		m.width, m.height = x.Width, x.Height
+		if m.explorer == 0 {
+			m.explorer = m.explorerWidth()
+		}
+		_ = m.service.SaveUIPreferences(m.collection, m.explorer)
 	case tea.KeyMsg:
-		m.handleKey(message)
+		m.handleKey(x)
 	case tea.MouseMsg:
-		m.handleMouse(message)
+		m.handleMouse(x)
 	}
 	return m, nil
 }
-
-func (m *Model) handleKey(key tea.KeyMsg) {
+func (m *Model) handleKey(k tea.KeyMsg) {
 	if m.mode == collectionPickerMode {
-		m.handleCollectionPicker(key)
+		m.handleCollectionPicker(k)
 		return
 	}
 	if m.mode == environmentPickerMode {
-		m.handleEnvironmentPicker(key)
+		m.handleEnvironmentPicker(k)
 		return
 	}
 	if m.mode == searchMode {
-		if key.Type == tea.KeyEsc || key.Type == tea.KeyEnter {
-			m.mode = browseMode
-			return
-		}
-		if key.Type == tea.KeyRunes {
-			m.query += string(key.Runes)
-		}
+		m.handleSearch(k)
 		return
 	}
-
-	switch key.Type {
+	switch k.Type {
 	case tea.KeyTab:
 		m.focus = (m.focus + 1) % 3
 	case tea.KeyCtrlP:
 		m.mode = collectionPickerMode
-		for index, collection := range m.collections {
-			if collection == m.collection {
-				m.selected = index
-				break
-			}
-		}
+		m.collectionIndex = indexOf(m.collections, m.collection)
 	case tea.KeyCtrlE:
 		if m.collection != "" {
 			m.mode = environmentPickerMode
+			m.environmentIndex = indexOf(m.environmentNames(), m.view.Environment)
 		}
+	case tea.KeyCtrlLeft:
+		m.resizeExplorer(-2)
+	case tea.KeyCtrlRight:
+		m.resizeExplorer(2)
 	case tea.KeyEsc:
 		m.message = ""
 	case tea.KeyEnter:
 		m.openSelected()
 	case tea.KeyUp:
-		m.move(-1)
+		m.moveTree(-1)
 	case tea.KeyDown:
-		m.move(1)
+		m.moveTree(1)
 	case tea.KeyLeft:
 		m.collapseSelected()
 	case tea.KeyRight:
 		m.expandSelected()
 	case tea.KeyRunes:
-		m.handleRune(string(key.Runes))
+		m.handleRune(string(k.Runes))
 	}
 }
 
-func (m *Model) handleRune(value string) {
-	switch value {
-	case "/":
-		m.mode = searchMode
-		m.query = ""
+func (m *Model) resizeExplorer(delta int) {
+	if m.explorer == 0 {
+		m.explorer = m.explorerWidth()
+	}
+	m.explorer += delta
+	if m.explorer < 24 {
+		m.explorer = 24
+	}
+	if m.width > 0 && m.explorer > m.width-20 {
+		m.explorer = m.width - 20
+	}
+	_ = m.service.SaveUIPreferences(m.collection, m.explorer)
+}
+func (m *Model) handleRune(s string) {
+	if s == "/" {
+		m.mode, m.query, m.treeIndex = searchMode, "", 0
+		return
+	}
+	if !m.vim {
+		return
+	}
+	switch s {
 	case "j":
-		if m.vim {
-			m.move(1)
-		}
+		m.moveTree(1)
 	case "k":
-		if m.vim {
-			m.move(-1)
-		}
+		m.moveTree(-1)
 	case "h":
-		if m.vim {
-			m.collapseSelected()
-		}
+		m.collapseSelected()
 	case "l":
-		if m.vim {
-			m.expandSelected()
-		}
+		m.expandSelected()
 	}
 }
-
-func (m *Model) handleCollectionPicker(key tea.KeyMsg) {
-	switch key.Type {
+func (m *Model) handleSearch(k tea.KeyMsg) {
+	switch k.Type {
+	case tea.KeyEsc:
+		m.mode, m.query, m.treeIndex = browseMode, "", 0
+	case tea.KeyEnter:
+		m.mode = browseMode
+		m.clampTreeIndex()
+	case tea.KeyBackspace:
+		if n := len(m.query); n > 0 {
+			m.query = m.query[:n-1]
+			m.clampTreeIndex()
+		}
+	case tea.KeyUp:
+		m.moveTree(-1)
+	case tea.KeyDown:
+		m.moveTree(1)
+	case tea.KeyRunes:
+		m.query += string(k.Runes)
+		m.clampTreeIndex()
+	}
+}
+func (m *Model) handleCollectionPicker(k tea.KeyMsg) {
+	switch k.Type {
 	case tea.KeyEsc:
 		m.mode = browseMode
 	case tea.KeyEnter:
 		if len(m.collections) > 0 {
-			m.openCollection(m.collections[m.selected%len(m.collections)])
+			m.openCollection(m.collections[m.collectionIndex])
 		}
 	case tea.KeyUp:
-		m.moveCollection(-1)
+		m.collectionIndex = wrap(m.collectionIndex-1, len(m.collections))
 	case tea.KeyDown:
-		m.moveCollection(1)
-	}
-	if key.Type == tea.KeyRunes && m.vim {
-		if string(key.Runes) == "j" {
-			m.moveCollection(1)
-		}
-		if string(key.Runes) == "k" {
-			m.moveCollection(-1)
-		}
+		m.collectionIndex = wrap(m.collectionIndex+1, len(m.collections))
 	}
 }
-
-func (m *Model) handleEnvironmentPicker(key tea.KeyMsg) {
+func (m *Model) handleEnvironmentPicker(k tea.KeyMsg) {
 	envs := m.environmentNames()
-	switch key.Type {
+	switch k.Type {
 	case tea.KeyEsc:
 		m.mode = browseMode
 	case tea.KeyEnter:
 		if len(envs) > 0 {
-			m.selectEnvironment(envs[m.selected%len(envs)])
+			m.selectEnvironment(envs[m.environmentIndex])
 		}
 	case tea.KeyUp:
-		m.moveEnvironment(-1, len(envs))
+		m.environmentIndex = wrap(m.environmentIndex-1, len(envs))
 	case tea.KeyDown:
-		m.moveEnvironment(1, len(envs))
+		m.environmentIndex = wrap(m.environmentIndex+1, len(envs))
 	}
 }
-
-func (m *Model) environmentNames() []string {
-	result := make([]string, 0, len(m.view.Environments))
-	for name := range m.view.Environments {
-		result = append(result, name)
-	}
-	sort.Strings(result)
-	return result
-}
-func (m *Model) move(delta int) {
-	if len(m.requestIDs) != 0 {
-		m.selected = (m.selected + delta + len(m.requestIDs)) % len(m.requestIDs)
-	}
-}
-func (m *Model) moveCollection(delta int) {
-	if len(m.collections) != 0 {
-		m.selected = (m.selected + delta + len(m.collections)) % len(m.collections)
-	}
-}
-func (m *Model) moveEnvironment(delta, count int) {
-	if count != 0 {
-		m.selected = (m.selected + delta + count) % count
+func (m *Model) moveTree(d int) { m.treeIndex = wrap(m.treeIndex+d, len(m.visibleRows())) }
+func (m *Model) clampTreeIndex() {
+	n := len(m.visibleRows())
+	if n == 0 {
+		m.treeIndex = 0
+	} else if m.treeIndex >= n {
+		m.treeIndex = n - 1
 	}
 }
 func (m *Model) openSelected() {
-	if m.focus == collectionPane && len(m.requestIDs) > 0 {
+	rows := m.visibleRows()
+	if m.focus != collectionPane || m.treeIndex < 0 || m.treeIndex >= len(rows) {
+		return
+	}
+	row := rows[m.treeIndex]
+	if row.kind == groupRow {
+		m.expanded[row.id] = !m.expanded[row.id]
+		m.clampTreeIndex()
+	} else if row.kind == requestRow {
 		m.focus = requestPane
-		m.message = "Request: " + m.requestIDs[m.selected]
+		m.message = "Request: " + row.id
 	}
 }
 func (m *Model) collapseSelected() {
-	if len(m.view.Tree.Groups) > 0 {
-		m.expanded[m.view.Tree.Groups[0].ID] = false
+	rows := m.visibleRows()
+	if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == groupRow {
+		m.expanded[rows[m.treeIndex].id] = false
+		m.clampTreeIndex()
 	}
 }
 func (m *Model) expandSelected() {
-	if len(m.view.Tree.Groups) > 0 {
-		m.expanded[m.view.Tree.Groups[0].ID] = true
+	rows := m.visibleRows()
+	if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == groupRow {
+		m.expanded[rows[m.treeIndex].id] = true
 	}
 }
-func (m *Model) handleMouse(mouse tea.MouseMsg) {
-	if mouse.X < max(24, m.width/3) {
+func (m *Model) handleMouse(x tea.MouseMsg) {
+	if x.Action != tea.MouseActionPress || x.Button != tea.MouseButtonLeft {
+		return
+	}
+	if x.X < m.explorerWidth() {
 		m.focus = collectionPane
-		m.openSelected()
-	} else if mouse.Y < m.height/2 {
+		row := x.Y - 2
+		rows := m.visibleRows()
+		if row >= 0 && row < len(rows) {
+			m.treeIndex = row
+			m.openSelected()
+		}
+	} else if x.Y < m.height/2 {
 		m.focus = requestPane
 	} else {
 		m.focus = responsePane
 	}
+}
+func (m Model) environmentNames() []string {
+	r := make([]string, 0, len(m.view.Environments))
+	for n := range m.view.Environments {
+		r = append(r, n)
+	}
+	sort.Strings(r)
+	return r
+}
+func (m Model) visibleRows() []treeRow {
+	var r []treeRow
+	for _, g := range m.view.Tree.Groups {
+		if p := parent(g.ID); p != "" && !m.expanded[p] {
+			continue
+		}
+		r = append(r, treeRow{g.ID, groupRow})
+	}
+	for _, id := range m.view.Tree.RequestIDs {
+		if !m.requestVisible(id) || (m.query != "" && !strings.Contains(strings.ToLower(id), strings.ToLower(m.query))) {
+			continue
+		}
+		r = append(r, treeRow{id, requestRow})
+	}
+	bad := make([]string, 0, len(m.view.Tree.Invalid))
+	for id := range m.view.Tree.Invalid {
+		bad = append(bad, id)
+	}
+	sort.Strings(bad)
+	for _, id := range bad {
+		r = append(r, treeRow{id, invalidRow})
+	}
+	return r
+}
+func parent(id string) string {
+	if i := strings.LastIndex(id, "/"); i >= 0 {
+		return id[:i]
+	}
+	return ""
+}
+func wrap(i, n int) int {
+	if n == 0 {
+		return 0
+	}
+	return (i%n + n) % n
+}
+func indexOf(xs []string, w string) int {
+	for i, x := range xs {
+		if x == w {
+			return i
+		}
+	}
+	return 0
 }

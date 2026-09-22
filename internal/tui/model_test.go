@@ -42,6 +42,7 @@ func TestCollectionSwitchChangesTreeAndEnvironment(t *testing.T) {
 
 func TestInvalidRequestHasWarningWhileValidSiblingOpens(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.View(); !containsAll(got, "warning", "check") {
 		t.Fatalf("tree View() = %q, want warning and valid sibling", got)
@@ -78,13 +79,13 @@ func TestTabCyclesPanes(t *testing.T) {
 
 func TestVimNavigationIsOptIn(t *testing.T) {
 	withoutVim := tui.New(fixtureService(t), tui.Options{})
-	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if got := withoutVim.View(); !containsAll(got, "Request: billing/nested") {
 		t.Fatalf("default View() = %q, want selection unchanged", got)
 	}
 	withVim := tui.New(fixtureService(t), tui.Options{VimMode: true})
-	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withVim, _ = withVim.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if got := withVim.View(); !containsAll(got, "Request: check") {
 		t.Fatalf("vim View() = %q, want selection moved", got)
@@ -101,7 +102,7 @@ func TestLeftAndRightToggleExpandedTreeGroup(t *testing.T) {
 		t.Fatalf("collapsed View() = %q, should hide grouped request", got)
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if got := m.View(); !strings.Contains(got, "\n  billing/nested\n") {
+	if got := m.View(); !strings.Contains(got, "billing/nested") {
 		t.Fatalf("expanded View() = %q, should restore grouped request", got)
 	}
 }

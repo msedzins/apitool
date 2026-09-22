@@ -60,6 +60,10 @@ type Workspace struct {
 	Collections      map[string]CollectionView
 	ActiveCollection string
 }
+type UIPreferences struct {
+	ActiveCollection string
+	ExplorerWidth    int
+}
 type CollectionView struct {
 	Path         string
 	Root         string
@@ -118,7 +122,11 @@ func (s *Service) OpenWorkspace(_ context.Context, start string, options OpenOpt
 	if err != nil {
 		return Workspace{}, err
 	}
-	opened := Workspace{Root: root, Collections: map[string]CollectionView{}, ActiveCollection: options.Collection}
+	activeCollection := options.Collection
+	if activeCollection == "" {
+		activeCollection = state.ActiveCollection
+	}
+	opened := Workspace{Root: root, Collections: map[string]CollectionView{}, ActiveCollection: activeCollection}
 	for _, found := range workspace.Discover(root) {
 		view := CollectionView{Path: found.Path, Root: found.Root, Collection: found.Collection, Diagnostics: append([]model.Diagnostic(nil), found.Diagnostics...), Environments: loadEnvironments(found.Root)}
 		var treeDiagnostics []model.Diagnostic
@@ -138,9 +146,12 @@ func (s *Service) OpenWorkspace(_ context.Context, start string, options OpenOpt
 		}
 		opened.Collections[found.Path] = view
 	}
-	if options.Collection != "" {
-		if _, ok := opened.Collections[options.Collection]; !ok {
-			return Workspace{}, fmt.Errorf("collection %q not found", options.Collection)
+	if opened.ActiveCollection != "" {
+		if _, ok := opened.Collections[opened.ActiveCollection]; !ok {
+			if options.Collection != "" {
+				return Workspace{}, fmt.Errorf("collection %q not found", options.Collection)
+			}
+			opened.ActiveCollection = ""
 		}
 	}
 	s.opened, s.store, s.git, s.confirmDangerous = &opened, store, s.deps.OpenGit(root), options.ConfirmDangerous
@@ -207,6 +218,23 @@ func (s *Service) Workspace() (Workspace, error) {
 		return Workspace{}, errors.New("workspace is not open")
 	}
 	return *s.opened, nil
+}
+
+func (s *Service) UIPreferences() (UIPreferences, error) {
+	if s.store == nil {
+		return UIPreferences{}, errors.New("workspace is not open")
+	}
+	state, err := s.store.LoadState()
+	if err != nil {
+		return UIPreferences{}, err
+	}
+	return UIPreferences{ActiveCollection: state.ActiveCollection, ExplorerWidth: state.ExplorerWidth}, nil
+}
+func (s *Service) SaveUIPreferences(collection string, explorerWidth int) error {
+	if s.store == nil {
+		return errors.New("workspace is not open")
+	}
+	return s.store.SaveState(runtime.State{ActiveCollection: collection, ExplorerWidth: explorerWidth})
 }
 
 func (s *Service) SelectEnvironment(_ context.Context, collectionPath, environment string) (CollectionView, error) {

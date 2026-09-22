@@ -42,19 +42,19 @@ type Model struct {
 	service *app.Service
 	view    app.CollectionView
 
-	collections []string
-	collection  string
-	requestIDs  []string
-	selected    int
-	focus       pane
-	mode        mode
-	vim         bool
-	color       bool
-	query       string
-	expanded    map[string]bool
-	width       int
-	height      int
-	message     string
+	collections                                  []string
+	collection                                   string
+	collectionIndex, environmentIndex, treeIndex int
+	focus                                        pane
+	mode                                         mode
+	vim                                          bool
+	color                                        bool
+	query                                        string
+	expanded                                     map[string]bool
+	width                                        int
+	height                                       int
+	explorer                                     int
+	message                                      string
 }
 
 // New creates a shell around a workspace already opened by service.
@@ -77,6 +77,12 @@ func New(service *app.Service, options Options) tea.Model {
 			options.StartingCollection = workspace.ActiveCollection
 		}
 	}
+	if preferences, err := service.UIPreferences(); err == nil {
+		if options.StartingCollection == "" && preferences.ActiveCollection != "" {
+			options.StartingCollection = preferences.ActiveCollection
+		}
+		m.explorer = preferences.ExplorerWidth
+	}
 	if options.StartingCollection != "" {
 		m.openCollection(options.StartingCollection)
 		if options.StartingEnvironment != "" && m.collection != "" {
@@ -94,12 +100,11 @@ func (m *Model) openCollection(path string) {
 		m.message = err.Error()
 		return
 	}
-	m.collection, m.view, m.selected, m.focus, m.mode = path, view, 0, collectionPane, browseMode
-	m.requestIDs = append([]string(nil), view.Tree.RequestIDs...)
-	sort.Strings(m.requestIDs)
+	m.collection, m.view, m.treeIndex, m.focus, m.mode = path, view, 0, collectionPane, browseMode
 	for _, group := range view.Tree.Groups {
 		m.expanded[group.ID] = true
 	}
+	_ = m.service.SaveUIPreferences(path, m.explorer)
 }
 
 func (m *Model) selectEnvironment(environment string) {
