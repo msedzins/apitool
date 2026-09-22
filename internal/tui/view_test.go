@@ -7,6 +7,8 @@ import (
 	"apitool/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestPickerMarksActualSelectionAndEnvironmentStartsActive(t *testing.T) {
@@ -116,6 +118,18 @@ func TestStatusViewCategoriesRemainTextualWithoutColor(t *testing.T) {
 				t.Fatalf("status = %q / %q, want %q", plain, colored, tc.category)
 			}
 		})
+	}
+}
+
+func TestStatusViewAddsStyleOnlyWhenColorIsEnabled(t *testing.T) {
+	original := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	t.Cleanup(func() { lipgloss.SetColorProfile(original) })
+
+	plain := tui.StatusView(tui.Status{Code: 500}, false)
+	colored := tui.StatusView(tui.Status{Code: 500}, true)
+	if strings.Contains(plain, "\x1b[") || !strings.Contains(colored, "\x1b[") || colored == plain {
+		t.Fatalf("plain = %q, colored = %q; want only colored status styled", plain, colored)
 	}
 }
 
