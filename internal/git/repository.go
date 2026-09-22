@@ -30,7 +30,10 @@ func (r Repository) Status(ctx context.Context) (string, error) {
 }
 
 func (r Repository) Diff(ctx context.Context) (string, error) {
-	return r.run(ctx, "diff")
+	// Comparing with HEAD includes both unstaged and staged changes. This lets
+	// users review the exact content a subsequent commit would contain when
+	// staging is performed outside apitool.
+	return r.run(ctx, "diff", "HEAD")
 }
 
 func (r Repository) Pull(ctx context.Context) (string, error) {

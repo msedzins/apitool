@@ -33,6 +33,25 @@ func TestStatusAndDiffRunAtWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestDiffIncludesStagedChanges(t *testing.T) {
+	root := initGitRepo(t)
+	path := writeWorkspaceChange(t, root)
+	stage := exec.Command("git", "add", filepath.Base(path))
+	stage.Dir = root
+	if output, err := stage.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+
+	repo := git.New(root, exec.CommandContext)
+	diff, err := repo.Diff(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "changed") {
+		t.Fatalf("diff = %q, want staged changed content", diff)
+	}
+}
+
 func TestCommitRejectsBlankMessageBeforeInvokingGit(t *testing.T) {
 	repo := git.New(initGitRepo(t), exec.CommandContext)
 
