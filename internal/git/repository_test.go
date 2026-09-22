@@ -52,6 +52,68 @@ func TestDiffIncludesStagedChanges(t *testing.T) {
 	}
 }
 
+func TestGitDiffAndStatusExcludeRuntimeDirectoryAndCommitRejectsIt(t *testing.T) {
+	root := initGitRepo(t)
+	runtimePath := filepath.Join(root, ".apitool", "history.jsonl")
+	if err := os.MkdirAll(filepath.Dir(runtimePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(runtimePath, []byte("runtime data\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stage := exec.Command("git", "add", ".apitool")
+	stage.Dir = root
+	if output, err := stage.CombinedOutput(); err != nil {
+		t.Fatalf("git add runtime data: %v\n%s", err, output)
+	}
+
+	repo := git.New(root, exec.CommandContext)
+	status, err := repo.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(status, ".apitool") {
+		t.Fatalf("status = %q, must hide runtime directory", status)
+	}
+	diff, err := repo.Diff(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(diff, ".apitool") || strings.Contains(diff, "runtime data") {
+		t.Fatalf("diff = %q, must hide runtime directory", diff)
+	}
+	if _, err := repo.Commit(context.Background(), "runtime commit"); err == nil || !strings.Contains(err.Error(), "runtime data") {
+		t.Fatalf("Commit error = %v, want runtime data rejection", err)
+	}
+}
+
+func TestDiffRedactsSensitiveDefinitionValues(t *testing.T) {
+	root := initGitRepo(t)
+	path := filepath.Join(root, "request.yaml")
+	content := "client_secret: super-secret\nAuthorization: Bearer bearer-secret\nCookie: session=cookie-secret\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stage := exec.Command("git", "add", filepath.Base(path))
+	stage.Dir = root
+	if output, err := stage.CombinedOutput(); err != nil {
+		t.Fatalf("git add sensitive definition: %v\n%s", err, output)
+	}
+	repo := git.New(root, exec.CommandContext)
+	diff, err := repo.Diff(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"super-secret", "bearer-secret", "cookie-secret"} {
+		if strings.Contains(diff, secret) {
+			t.Fatalf("diff contains secret %q: %s", secret, diff)
+		}
+	}
+	if strings.Count(diff, "[REDACTED]") != 3 {
+		t.Fatalf("diff = %q, want three redacted values", diff)
+	}
+}
+
 func TestCommitRejectsBlankMessageBeforeInvokingGit(t *testing.T) {
 	repo := git.New(initGitRepo(t), exec.CommandContext)
 

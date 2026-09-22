@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 )
+
+var sensitiveDiffValue = regexp.MustCompile(`(?im)(["']?(?:client[_-]?secret|access[_-]?token|refresh[_-]?token|authorization|proxy[_-]?authorization|set[_-]?cookie|cookie|api[_-]?key|password|secret)["']?\s*[:=]\s*).*$`)
 
 // CommandFunc is injectable so callers can test command construction without
 // changing the adapter's production behavior.
@@ -26,14 +29,15 @@ func New(root string, command CommandFunc) Repository {
 }
 
 func (r Repository) Status(ctx context.Context) (string, error) {
-	return r.run(ctx, "status", "--short")
+	return r.run(ctx, "status", "--short", "--", ".", ":(exclude).apitool/**")
 }
 
 func (r Repository) Diff(ctx context.Context) (string, error) {
 	// Comparing with HEAD includes both unstaged and staged changes. This lets
 	// users review the exact content a subsequent commit would contain when
 	// staging is performed outside apitool.
-	return r.run(ctx, "diff", "HEAD")
+	output, err := r.run(ctx, "diff", "HEAD", "--", ".", ":(exclude).apitool/**")
+	return redactDiff(output), err
 }
 
 func (r Repository) Pull(ctx context.Context) (string, error) {
@@ -48,7 +52,21 @@ func (r Repository) Commit(ctx context.Context, message string) (string, error) 
 	if strings.TrimSpace(message) == "" {
 		return "", errors.New("commit message must not be blank")
 	}
+	staged, err := r.run(ctx, "diff", "--cached", "--name-only", "--", ".")
+	if err != nil {
+		return staged, err
+	}
+	for _, path := range strings.Split(staged, "\n") {
+		path = strings.TrimPrefix(strings.TrimSpace(path), "./")
+		if path == ".apitool" || strings.HasPrefix(path, ".apitool/") {
+			return staged, errors.New("commit includes runtime data under .apitool")
+		}
+	}
 	return r.run(ctx, "commit", "-m", message)
+}
+
+func redactDiff(text string) string {
+	return sensitiveDiffValue.ReplaceAllString(text, `${1}[REDACTED]`)
 }
 
 func (r Repository) run(ctx context.Context, args ...string) (string, error) {
