@@ -3,14 +3,16 @@ package runtime
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"apitool/internal/model"
+	"golang.org/x/sys/unix"
 )
 
 // HistoryEntry is the safe, searchable record of one execution. It never
@@ -69,32 +71,70 @@ func (s *Store) AppendHistory(key Key, method string, response model.Response, e
 func (s *Store) SearchHistory(query string) ([]HistoryEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	file, err := os.Open(filepath.Join(s.root, "history.jsonl"))
-	if os.IsNotExist(err) {
+	fd, err := unix.Openat(s.rootFD, "history.jsonl", unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if errors.Is(err, unix.ENOENT) {
 		return []HistoryEntry{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open history: %w", err)
 	}
+	file := os.NewFile(uintptr(fd), "history.jsonl")
 	defer file.Close()
 
 	needle := strings.ToLower(strings.TrimSpace(query))
 	entries := make([]HistoryEntry, 0)
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), 1024*1024)
-	for scanner.Scan() {
+	reader := bufio.NewReaderSize(file, 64*1024)
+	for {
+		line, err := reader.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			if err := discardHistoryLine(reader); err != nil && !errors.Is(err, io.EOF) {
+				return nil, fmt.Errorf("read history: %w", err)
+			}
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			break // A partial final write is ignored as one malformed record.
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read history: %w", err)
+		}
 		var entry HistoryEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+		if err := json.Unmarshal(line, &entry); err != nil || !validHistoryEntry(entry) {
 			continue
 		}
 		if historyMatches(entry, needle) {
 			entries = append(entries, entry)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read history: %w", err)
+	for left, right := 0, len(entries)-1; left < right; left, right = left+1, right-1 {
+		entries[left], entries[right] = entries[right], entries[left]
 	}
 	return entries, nil
+}
+
+func discardHistoryLine(reader *bufio.Reader) error {
+	for {
+		_, err := reader.ReadSlice('\n')
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return err
+		}
+	}
+}
+
+func validHistoryEntry(entry HistoryEntry) bool {
+	if entry.Timestamp.IsZero() || strings.TrimSpace(entry.Method) == "" || entry.Result == "" {
+		return false
+	}
+	if _, err := (Key{CollectionPath: entry.CollectionPath, Environment: entry.Environment, RequestID: entry.RequestID}).segments(); err != nil {
+		return false
+	}
+	if entry.ErrorCategory != "" {
+		return entry.StatusCode == 0 && entry.Result == string(entry.ErrorCategory)
+	}
+	return entry.StatusCode >= 100 && entry.StatusCode <= 599 && entry.Result == strconv.Itoa(entry.StatusCode)
 }
 
 func historyMatches(entry HistoryEntry, needle string) bool {

@@ -69,3 +69,30 @@ func TestHistorySearchesSafeMetadataAndExcludesOAuthFailureSecrets(t *testing.T)
 		}
 	}
 }
+
+func TestSearchHistorySkipsOversizedAndStructurallyInvalidLinesNewestFirst(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := append(bytes.Repeat([]byte("x"), 1024*1024+1), '\n')
+	corrupt = append(corrupt, []byte("{}\n")...)
+	if err := os.WriteFile(filepath.Join(workspace, ".apitool", "history.jsonl"), corrupt, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	key := runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "list"}
+	if err := store.AppendHistory(key, "GET", model.Response{StatusCode: 200}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendHistory(runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "create"}, "POST", model.Response{StatusCode: 201}, nil); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := store.SearchHistory("payments")
+	if err != nil {
+		t.Fatalf("SearchHistory() error = %v, want malformed lines skipped", err)
+	}
+	if len(entries) != 2 || entries[0].RequestID != "create" || entries[1].RequestID != "list" {
+		t.Errorf("SearchHistory() = %#v, want newest valid entries first", entries)
+	}
+}

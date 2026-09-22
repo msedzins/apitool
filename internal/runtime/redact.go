@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -43,7 +44,11 @@ func (s *Store) AppendLog(entry LogEntry) error {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
-	entry.Path = redactPath(entry.Path)
+	path, err := redactPath(entry.Path)
+	if err != nil {
+		return err
+	}
+	entry.Path = path
 	data, err := structuredRedaction(entry.Data)
 	if err != nil {
 		return err
@@ -117,16 +122,19 @@ func RedactData(value any) any {
 func sensitiveKey(key string) bool {
 	normalized := strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(key))
 	switch normalized {
-	case "authorization", "proxyauthorization", "cookie", "setcookie", "clientsecret", "accesstoken", "refreshtoken", "idtoken", "token", "secret", "password", "body", "rawbody", "requestbody", "content":
+	case "authorization", "proxyauthorization", "cookie", "setcookie", "clientsecret", "accesstoken", "refreshtoken", "idtoken", "token", "secret", "password", "body", "rawbody", "requestbody", "content", "apikey", "xapikey":
 		return true
 	default:
-		return strings.Contains(normalized, "token") || strings.Contains(normalized, "secret")
+		return strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "apikey")
 	}
 }
 
 func structuredRedaction(value any) (any, error) {
 	if value == nil {
 		return nil, nil
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return nil, errors.New("log metadata must be an object")
 	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
@@ -136,17 +144,61 @@ func structuredRedaction(value any) (any, error) {
 	if err := json.Unmarshal(encoded, &generic); err != nil {
 		return nil, fmt.Errorf("decode log metadata: %w", err)
 	}
-	return RedactData(generic), nil
+	object, ok := generic.(map[string]any)
+	if !ok {
+		return nil, errors.New("log metadata must be an object")
+	}
+	return redactLogObject(object), nil
 }
 
-func redactPath(path string) string {
+func redactLogObject(object map[string]any) map[string]any {
+	result := make(map[string]any, len(object))
+	for key, value := range object {
+		if sensitiveKey(key) {
+			result[key] = redacted
+			continue
+		}
+		switch typed := value.(type) {
+		case map[string]any:
+			result[key] = redactLogObject(typed)
+		case []any:
+			if safeLogValueKey(key) {
+				result[key] = typed
+			} else {
+				result[key] = redacted
+			}
+		default:
+			if safeLogValueKey(key) {
+				result[key] = typed
+			} else {
+				result[key] = redacted
+			}
+		}
+	}
+	return result
+}
+
+func safeLogValueKey(key string) bool {
+	switch strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(key)) {
+	case "trace", "traceid", "stage", "status", "statuscode", "errorcode", "grant", "scope", "scopes", "expiry", "expiresat", "method", "host", "path", "duration":
+		return true
+	default:
+		return false
+	}
+}
+
+func redactPath(path string) (string, error) {
 	if path == "" {
-		return ""
+		return "", nil
 	}
 	parsed, err := url.Parse(path)
 	if err != nil {
-		return redacted
+		return "", errors.New("log path is invalid")
 	}
+	if parsed.IsAbs() || parsed.Host != "" || parsed.User != nil {
+		return "", errors.New("log path must not include an authority")
+	}
+	parsed.Fragment = ""
 	query := parsed.Query()
 	for key := range query {
 		if sensitiveKey(key) {
@@ -154,5 +206,45 @@ func redactPath(path string) string {
 		}
 	}
 	parsed.RawQuery = query.Encode()
-	return parsed.String()
+	return parsed.String(), nil
+}
+
+func responseBodySensitive(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	var decoded any
+	if json.Unmarshal(body, &decoded) == nil {
+		return responseValueSensitive(decoded)
+	}
+	lower := strings.ToLower(string(body))
+	for _, marker := range []string{"access_token", "refresh_token", "client_secret", "api_key", "authorization", "set-cookie"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func responseValueSensitive(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if credentialKey(key) || responseValueSensitive(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if responseValueSensitive(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func credentialKey(key string) bool {
+	normalized := strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(key))
+	return strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") || strings.Contains(normalized, "apikey") || normalized == "authorization" || normalized == "cookie" || normalized == "password"
 }

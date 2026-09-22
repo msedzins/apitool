@@ -80,3 +80,34 @@ func TestAppendLogRedactsNestedMetadataHeadersAndSensitiveQueryValues(t *testing
 		t.Errorf("log omitted safe metadata: %s", raw)
 	}
 }
+
+func TestAppendLogRejectsUnstructuredDataAndUnsafeURLParts(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "users/list"}
+	for name, entry := range map[string]runtime.LogEntry{
+		"scalar data": {Key: key, Method: "GET", Data: "data-token-000"},
+		"userinfo":    {Key: key, Method: "GET", Path: "//user:fragment-token-789@example.test/items"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := store.AppendLog(entry); err == nil {
+				t.Fatal("AppendLog() error = nil, want unsafe input rejected")
+			}
+		})
+	}
+	if err := store.AppendLog(runtime.LogEntry{Key: key, Method: "GET", Path: "/items#access_token=fragment-token-789", Data: map[string]any{"detail": "unknown-value-token-111"}}); err != nil {
+		t.Fatalf("AppendLog() fragment error = %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(workspace, ".apitool", "logs", "executions.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range [][]byte{[]byte("data-token-000"), []byte("fragment-token-789"), []byte("unknown-value-token-111")} {
+		if bytes.Contains(raw, secret) {
+			t.Errorf("log contains unsafe value %q: %s", secret, raw)
+		}
+	}
+}

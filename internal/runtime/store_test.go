@@ -143,3 +143,103 @@ func TestStateIsEmptyWhenMissingAndPersistsOnlySessionPreferences(t *testing.T) 
 		t.Errorf("state persistence = %q, %v; want non-secret preferences only", raw, err)
 	}
 }
+
+func TestOpenRejectsRuntimeDirectorySymlink(t *testing.T) {
+	workspace := t.TempDir()
+	external := t.TempDir()
+	if err := os.Symlink(external, filepath.Join(workspace, ".apitool")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Open(workspace); err == nil {
+		t.Fatal("Open() error = nil, want runtime directory symlink rejected")
+	}
+	if entries, err := os.ReadDir(external); err != nil || len(entries) != 0 {
+		t.Errorf("external directory after Open() = %#v, %v; want untouched", entries, err)
+	}
+}
+
+func TestResponseCacheRejectsNestedSymlink(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := t.TempDir()
+	responses := filepath.Join(workspace, ".apitool", "responses")
+	if err := os.MkdirAll(responses, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(responses, "payments")); err != nil {
+		t.Fatal(err)
+	}
+	err = store.SaveResponse(runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "list"}, model.Response{StatusCode: 200})
+	if err == nil {
+		t.Fatal("SaveResponse() error = nil, want nested cache symlink rejected")
+	}
+	if entries, err := os.ReadDir(external); err != nil || len(entries) != 0 {
+		t.Errorf("external directory after SaveResponse() = %#v, %v; want untouched", entries, err)
+	}
+}
+
+func TestResponseCacheRejectsTokenBearingBodyAndAPIKeyHeader(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "token"}
+	err = store.SaveResponse(key, model.Response{StatusCode: 200, Body: []byte(`{"access_token":"body-token-456"}`)})
+	if err == nil {
+		t.Fatal("SaveResponse() error = nil, want token-bearing body rejected")
+	}
+	if _, err := store.LatestResponse(key); !errors.Is(err, runtime.ErrNotFound) {
+		t.Errorf("LatestResponse() error = %v, want ErrNotFound after rejected cache body", err)
+	}
+
+	safeKey := runtime.Key{CollectionPath: "payments", Environment: "prod", RequestID: "headers"}
+	if err := store.SaveResponse(safeKey, model.Response{StatusCode: 200, Headers: http.Header{"X-API-Key": {"api-key-123"}}}); err != nil {
+		t.Fatalf("SaveResponse() safe body error = %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(workspace, ".apitool", "responses", "payments", "prod", "headers", "latest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(raw, []byte("api-key-123")) {
+		t.Errorf("cached headers contain API key: %s", raw)
+	}
+}
+
+func TestSaveStateMergesTwoStoresPreferences(t *testing.T) {
+	workspace := t.TempDir()
+	first, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateA, err := first.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateB, err := second.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateA.LastActiveEnvironment["payments"] = "prod"
+	stateB.PanelPreferences["response_headers_open"] = true
+	if err := first.SaveState(stateA); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.SaveState(stateB); err != nil {
+		t.Fatal(err)
+	}
+	got, err := first.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastActiveEnvironment["payments"] != "prod" || !got.PanelPreferences["response_headers_open"] {
+		t.Errorf("merged state = %#v, want both stores' updates", got)
+	}
+}
