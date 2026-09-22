@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 // Collection is the metadata and defaults for one API collection.
 type Collection struct {
 	Name        string      `yaml:"name"`
@@ -53,4 +55,17 @@ type Auth struct {
 type HTTPConfig struct {
 	Timeout            string `yaml:"timeout,omitempty"`
 	InsecureSkipVerify *bool  `yaml:"insecure_skip_verify,omitempty"`
+}
+
+// EffectiveRequest is the resolved configuration used to build one HTTP request.
+// A zero Timeout has the same no-deadline behavior as http.DefaultClient.
+type EffectiveRequest struct {
+	Method             string
+	URL                string
+	Params             map[string]string
+	Headers            map[string]string
+	Body               []byte
+	Auth               *Auth
+	Timeout            time.Duration
+	InsecureSkipVerify bool
 }
