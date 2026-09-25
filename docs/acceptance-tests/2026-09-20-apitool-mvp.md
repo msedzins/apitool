@@ -83,6 +83,64 @@ The user opens the collection picker and selects either collection.
 
 Both collections are listed, and selecting one opens its request tree.
 
+### Approved screen workflow
+
+**Visual approval:** approved<br>
+**Viewport:** 100 columns × 30 rows<br>
+**Interaction:** keyboard; `↑`/`↓` moves the selection and `Enter` opens it.<br>
+**Snapshot candidate:** true
+
+The workflow needs two screens: the picker proves discovery and selection; the
+opened collection proves that the selection changed the active request tree.
+
+#### Screen 1 — collection picker
+
+```text
+┌────────────────────────────┬──────────────────────────────────────────────────────┐
+│ Collections / tree         │ apitool                                              │
+│                            │                                                      │
+│  ▸ payments                │  Collection picker                                   │
+│  ▸ users                   │  Select a collection to open                        │
+│                            │                                                      │
+│                            │        ┌──────────────────────────────────┐          │
+│                            │        │ Collections                      │          │
+│                            │        │                                  │          │
+│                            │        │ > payments                       │          │
+│                            │        │   Payments API                   │          │
+│                            │        │   payments/.api                  │          │
+│                            │        │                                  │          │
+│                            │        │   users                          │          │
+│                            │        │   Users API                      │          │
+│                            │        │   users/.api                     │          │
+│                            │        │                                  │          │
+│                            │        │ ↑/↓ move   Enter open   Esc close│          │
+│                            │        └──────────────────────────────────┘          │
+│                            │                                                      │
+├────────────────────────────┼──────────────────────────────────────────────────────┤
+│ Ctrl+P collections         │ No collection selected                               │
+│ ↑/↓ navigate • Enter open  │                                                      │
+└────────────────────────────┴──────────────────────────────────────────────────────┘
+```
+
+#### Screen 2 — selected collection request tree
+
+```text
+┌────────────────────────────┬──────────────────────────────────────────────────────┐
+│ Collections / tree         │ GET | {{base_url}}/payments              [ Send ]    │
+│                            ├──────────────────────────────────────────────────────┤
+│ ▾ payments                 │ Params | Headers | Auth | Body | Settings             │
+│   ▾ payments               │                                                      │
+│     GET list               │ Request: payments/list                               │
+│     POST create            │                                                      │
+│   ▸ admin                  ├──────────────────────────────────────────────────────┤
+│ ▸ users                    │ Response / Diagnostics / Request Log                 │
+│                            │ Select Send to execute this request.                 │
+├────────────────────────────┼──────────────────────────────────────────────────────┤
+│ Collection: payments       │ Environment: test                                    │
+│ Ctrl+P collections         │                                                      │
+└────────────────────────────┴──────────────────────────────────────────────────────┘
+```
+
 ### Notes
 
 No workspace manifest or Git remote is required.
