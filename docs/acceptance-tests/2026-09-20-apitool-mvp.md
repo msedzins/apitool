@@ -921,4 +921,4 @@ None identified. Future private implementation tasks may be intentionally covere
 
 ### Ambiguities that block a trustworthy case
 
-None identified. apitool has no database requirement, so no `DB-xxx` case is included.
+None identified. apitool has no database requirement, so no scenario uses the `Database` surface.

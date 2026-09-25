@@ -81,8 +81,8 @@ boundaries, incidental formatting, or every combination of input values.
 
 Use one Markdown file per feature or design document. Classify each scenario
 with one behavior category and one or more observable surfaces. Use category
-IDs: `UI-xxx`, `API-xxx`, `CFG-xxx`, `DATA-xxx`, `DB-xxx`, `WF-xxx`, or
-`OPS-xxx`. Start each suite by copying
+IDs: `UI-xxx`, `API-xxx`, `CFG-xxx`, `DATA-xxx`, `WF-xxx`, or `OPS-xxx`.
+Start each suite by copying
 [`assets/acceptance-test-suite.md`](assets/acceptance-test-suite.md), then
 fill only fields supported by the authoritative documents.
 
@@ -104,8 +104,7 @@ Choose the category that describes the behavior, not its implementation:
 | `UI` | A user-visible interaction, navigation flow, dialog, or rendered state. |
 | `API` | Behavior exposed through a supported callable or protocol contract. |
 | `CFG` | User-owned configuration creation, validation, persistence, or selection. |
-| `DATA` | Runtime-data lifecycle, isolation, redaction, retention, or permissions outside a database contract. |
-| `DB` | Required database persistence, query, integrity, or transaction behavior. |
+| `DATA` | Runtime or persistent-data lifecycle, isolation, redaction, retention, permissions, and database-backed behavior. |
 | `WF` | An end-to-end user or operator journey spanning multiple categories. |
 | `OPS` | CI, deployment, monitoring, or other operational behavior. |
 
@@ -122,9 +121,9 @@ Name the observable surface used to prove the behavior:
 | `Supported internal API` | A documented stable cross-component interface can be observed by its supported consumer; ordinary package APIs and helpers do not qualify. |
 
 HTTP, OAuth, gRPC, GraphQL, webhooks, and queues are `API/Protocol`
-qualifiers, not universal surfaces. Use `DB` and `Database` only when the
-requirements define an observable database contract; do not add a database
-case merely because an implementation uses a database.
+qualifiers, not universal surfaces. Use the `Database` surface only when the
+requirements define an observable database contract; do not add it merely
+because an implementation uses a database.
 
 ## BDD scenario design
 
@@ -146,21 +145,6 @@ snapshot_candidate: true
 
 This skill defines the case and expected snapshot intent. It does not generate,
 approve, compare, or update snapshots.
-
-### Observable boundary coverage
-
-Separate internal discovery from user-visible availability. Use precise terms:
-
-- **discovered**: the application or service finds the entity in its source;
-- **listed**: the UI presents the discovered entity to the user;
-- **selectable/openable**: the user can choose it and reach its intended view;
-- **usable**: the entity passes the validity rules required for its operation.
-
-Assert these states through a named observable surface. For example, a
-collection-discovery requirement is accepted when the TUI or CLI lists and
-opens the collection; a private discovery function is covered by lower-level
-tests. Do not use “available” without stating which of these observable
-meanings is intended.
 
 ## Traceability report
 
