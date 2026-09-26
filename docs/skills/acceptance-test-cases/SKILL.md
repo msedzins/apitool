@@ -160,6 +160,19 @@ Also list, separately:
 - tasks without mapped acceptance coverage;
 - ambiguities that block a trustworthy case.
 
+## Keep acceptance cases and implementation plans distinct
+
+The acceptance-test document owns stable case IDs, BDD scenarios, and the
+requirement-to-task-to-case mapping. The implementation plan owns the work to
+build and verify the behavior. Describe that work by behavior and implementation
+verification, without copying acceptance-case IDs or restating their scenarios.
+Keep case-ID traceability in the acceptance-test index and report; refer to the
+design behavior in the implementation plan when context is needed.
+
+For example, write “test opening help from each TUI mode and restoring the
+previous view” in the implementation plan, while the acceptance document maps
+those behaviors to their `UI-xxx` cases.
+
 ## Quality check
 
 Before finishing, confirm each case:
