@@ -560,19 +560,21 @@ Run: `go test ./internal/tui -run 'Test(CollectionPickerOpensCollectionAndRestor
 
 Expected: FAIL because the TUI package does not exist.
 
-- [ ] **Step 3: Implement the shell and explorer**
+- [ ] **Step 3: Implement the shell, explorer, keyboard help, and focus feedback**
 
 Build a three-region view: persistent left collection/request tree, upper request area, lower response/diagnostic area. Implement collection picker, direct opening, environment picker, tree expansion, `Tab`, arrows, `Enter`, `Esc`, `/`, and `Ctrl+P`. Add mouse click routing for focus/selection and optional `j/k/h/l` aliases. Render status color when capable and explicit textual category (`success`, `redirect`, `client error`, `server error`, `warning`) when not. Store splitter and active collection/environment preferences through Task 5 state.
 
-- [ ] **Step 4: Add navigation tests**
+Implement keyboard help and pane-focus behavior from the design specification. `?` opens help from collection picker, environment picker, search, and collection view; only `?`, `Esc`, and `Ctrl+C` act while the overlay is open. Closing help restores the unchanged underlying mode, selection, query, and focus; `Ctrl+C` exits. In the collection view, `Tab` cycles collection, request, response, and collection; exactly one pane heading carries the text marker `▶`, including when color is disabled. Render the centered 100×30 overlay and a compact one-column fallback for smaller terminals.
 
-Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled.
+- [ ] **Step 4: Add navigation and accessibility tests**
+
+Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add focused tests for opening help from every TUI mode; closing it with `?` or `Esc` and restoring the underlying view; verifying unsupported keys do not dismiss or mutate the obscured view; confirming `Ctrl+C` exits; checking exactly one focus marker through the full Tab cycle without color; and verifying compact help fits at the 80×24 acceptance viewport. The approved 100×30 baselines are `testdata/ui-001/payments-tree.txt` (collection focus) and `testdata/ui-015/keyboard-help.txt`, `request-focus.txt`, and `response-focus.txt`. Snapshot tests must read these committed files directly as their sole visual source of truth.
 
 - [ ] **Step 5: Run TUI tests and manual smoke test**
 
-Run: `go test ./internal/tui && go run ./cmd/apitool --help`
+Run: `go test ./internal/tui -count=1 && go test ./... && go run ./cmd/apitool --help`
 
-Expected: PASS; help lists `--env` and `--confirm-dangerous`.
+Expected: PASS; help lists `--env` and `--confirm-dangerous`, and the TUI suite validates the updated collection screen and three new approved screen baselines.
 
 - [ ] **Step 6: Commit TUI shell**
 

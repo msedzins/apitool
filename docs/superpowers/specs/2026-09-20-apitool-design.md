@@ -243,11 +243,11 @@ The Auth view may inspect the current OAuth token, but it starts masked. Reveali
 
 ## 7. TUI and interaction design
 
-The primary screen is Postman-like rather than a terminal menu: a persistent left explorer, a request editor above, and a response/diagnostic area below. The request/response split is resizable.
+The primary screen is Postman-like rather than a terminal menu: a persistent left explorer, a request editor above, and a response/diagnostic area below. The request/response split is resizable. The active pane always has a leading `▶` marker in its heading; this marker is required even when color is available, so keyboard focus is visible without relying on color.
 
 ```text
 ┌──────────────────────┬────────────────────────────────────────────────┐
-│ Collections / tree   │ GET | {{base_url}}/users              [ Send ]  │
+│ ▶ Collections / tree │ GET | {{base_url}}/users              [ Send ]  │
 │                      ├────────────────────────────────────────────────┤
 │ ▾ payments           │ Params | Headers | Auth | Body | Settings       │
 │   ▾ payments         │ request editor                                 │
@@ -261,7 +261,9 @@ The top bar displays active collection, environment, and compact Git status. The
 
 The editor covers method, URL, params, headers, auth, body, and request name. JSON bodies offer a structured JSON editor by default plus a raw/text mode; the user can switch between modes, pretty-print JSON, and receives validation feedback before send. Non-JSON bodies use raw editing.
 
-Core interaction supports keyboard and mouse. Standard controls include arrows, `Tab`, `Enter`, `Esc`, `Ctrl+S` to save, `Ctrl+Enter` to send, `Ctrl+P` for the command palette, `/` for search, and `Ctrl+E` for environment selection. Vim bindings (`j/k`, `h/l`) are optional, not required. Status colors distinguish 2xx/3xx/4xx/5xx, warnings, and errors, with text/symbol fallback when color is unavailable.
+Core interaction supports keyboard and mouse. Standard controls include arrows, `Tab`, `Enter`, `Esc`, `Ctrl+S` to save, `Ctrl+Enter` to send, `Ctrl+P` for the command palette, `/` for search, `Ctrl+E` for environment selection, and `?` for keyboard help. In the collection view, `Tab` cycles focus through the collection, request, and response panes, then back to the collection pane. Vim bindings (`j/k`, `h/l`) are optional, not required. Status colors distinguish 2xx/3xx/4xx/5xx, warnings, and errors, with text/symbol fallback when color is unavailable.
+
+`?` opens a modal keyboard-help overlay from every TUI mode: collection picker, environment picker, search, and the three-pane collection view. The overlay blocks all input except `?`, `Esc`, and `Ctrl+C`; `?` or `Esc` closes it and restores the exact underlying mode, selection, query, and active pane. `Ctrl+C` always exits. At the approved 100×30 viewport, the overlay is centered above the underlying screen and lists navigation, workspace, search, layout, help, and exit controls. On smaller terminals it uses a compact one-column layout rather than clipping.
 
 Edits are in memory until explicitly saved. On navigation away from a dirty request, offer **Save and continue**, **Discard changes**, or **Cancel**. There is no autosave. Undo/redo applies to the current request editing session. Duplicate creates a new request definition for the user to rename/edit/save. Delete request and delete group perform physical deletion only after a clear confirmation; a group delete includes its contained request files.
 

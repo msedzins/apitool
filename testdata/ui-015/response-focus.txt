@@ -1,5 +1,5 @@
 ┌────────────────────────────┬─────────────────────────────────────────────────────────────────────┐
-│ ▶ Collections / tree       │ GET | {{base_url}}/payments                           [ Send ]      │
+│ Collections / tree         │ GET | {{base_url}}/payments                           [ Send ]      │
 │                            ├─────────────────────────────────────────────────────────────────────┤
 │ ▾ payments                 │ Params | Headers | Auth | Body | Settings                           │
 │   ▾ payments               │                                                                     │
@@ -7,7 +7,7 @@
 │     POST create            │                                                                     │
 │   ▸ admin                  │                                                                     │
 │ ▸ users                    ├─────────────────────────────────────────────────────────────────────┤
-│                            │ Response / Diagnostics / Request Log                                │
+│                            │ ▶ Response / Diagnostics / Request Log                              │
 │                            │ Select Send to execute this request.                                │
 │                            │                                                                     │
 │                            │                                                                     │

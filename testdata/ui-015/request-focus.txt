@@ -1,5 +1,5 @@
 ┌────────────────────────────┬─────────────────────────────────────────────────────────────────────┐
-│ ▶ Collections / tree       │ GET | {{base_url}}/payments                           [ Send ]      │
+│ Collections / tree         │ ▶ GET | {{base_url}}/payments                         [ Send ]      │
 │                            ├─────────────────────────────────────────────────────────────────────┤
 │ ▾ payments                 │ Params | Headers | Auth | Body | Settings                           │
 │   ▾ payments               │                                                                     │
