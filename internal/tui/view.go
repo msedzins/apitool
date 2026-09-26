@@ -137,8 +137,14 @@ func (m Model) collectionPickerView() string {
 	}
 
 	left, right := make([]string, height), make([]string, height)
-	left[1], right[1] = " Collections / tree", " apitool"
-	right[3], right[4] = "  Collection picker", "  Select a collection to open"
+	setRow := func(row int, leftText, rightText string) {
+		if row >= 0 && row < height {
+			left[row], right[row] = leftText, rightText
+		}
+	}
+	setRow(1, " Collections / tree", " apitool")
+	setRow(3, "", "  Collection picker")
+	setRow(4, "", "  Select a collection to open")
 	for i, collection := range m.collections {
 		if 3+i >= divider {
 			break
