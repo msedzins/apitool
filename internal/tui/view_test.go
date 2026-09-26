@@ -2,6 +2,7 @@ package tui_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,15 +17,29 @@ import (
 )
 
 func TestPickerMarksActualSelectionAndEnvironmentStartsActive(t *testing.T) {
-	m := tui.New(fixtureService(t), tui.Options{})
+	m := tui.New(fixtureService(t), tui.Options{Color: false})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
-	if got := m.View(); !strings.Contains(got, "> payments") {
-		t.Fatalf("collection picker = %q, want active collection marked", got)
+	if got := m.View(); !strings.Contains(got, "│ > payments") || !strings.Contains(got, "No collection selected") {
+		t.Fatalf("collection picker = %q, want persistent frame with active collection marked", got)
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	if got := m.View(); !strings.Contains(got, "> test") {
 		t.Fatalf("environment picker = %q, want active environment marked", got)
+	}
+}
+
+func TestCollectionPickerRendersAtSmallHeights(t *testing.T) {
+	for _, height := range []int{1, 2, 3, 4} {
+		t.Run(fmt.Sprintf("height-%d", height), func(t *testing.T) {
+			m := tui.New(fixtureService(t), tui.Options{Color: false})
+			m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+			m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: height})
+			if got := m.View(); got == "" {
+				t.Fatal("collection picker rendered an empty screen")
+			}
+		})
 	}
 }
 

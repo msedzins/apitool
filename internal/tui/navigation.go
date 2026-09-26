@@ -24,7 +24,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = x.Width, x.Height
-		m.explorer = clampExplorer(m.explorer, m.width)
+		if m.explorer > 0 || !m.approvedShell {
+			m.explorer = clampExplorer(m.explorer, m.width)
+		}
 		m.savePreferences()
 	case tea.KeyMsg:
 		if x.Type == tea.KeyCtrlC {
@@ -83,7 +85,11 @@ func (m *Model) handleKey(k tea.KeyMsg) {
 }
 
 func (m *Model) resizeExplorer(delta int) {
-	m.explorer = clampExplorer(m.explorer+delta, m.width)
+	width := m.explorer
+	if width == 0 && m.approvedShell {
+		width = 28
+	}
+	m.explorer = clampExplorer(width+delta, m.width)
 	m.savePreferences()
 }
 func (m *Model) savePreferences() {
