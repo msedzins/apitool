@@ -1,0 +1,4 @@
+name: Create payment
+method: POST
+request:
+  url: "{{base_url}}/payments"
