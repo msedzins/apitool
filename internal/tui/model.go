@@ -17,7 +17,6 @@ type Options struct {
 	ConfirmDangerous    bool
 	VimMode             bool
 	Color               bool
-	ApprovedShell       bool
 }
 
 type pane int
@@ -51,7 +50,6 @@ type Model struct {
 	mode                                         mode
 	vim                                          bool
 	color                                        bool
-	approvedShell                                bool
 	query                                        string
 	pendingEnvironment                           string
 	expanded                                     map[string]bool
@@ -63,7 +61,7 @@ type Model struct {
 
 // New creates a shell around a workspace already opened by service.
 func New(service *app.Service, options Options) tea.Model {
-	m := Model{service: service, vim: options.VimMode, color: options.Color, approvedShell: options.ApprovedShell, expanded: map[string]bool{}, pendingEnvironment: options.StartingEnvironment}
+	m := Model{service: service, vim: options.VimMode, color: options.Color, expanded: map[string]bool{}, pendingEnvironment: options.StartingEnvironment}
 	if service == nil {
 		m.message = "No workspace is open"
 		return m

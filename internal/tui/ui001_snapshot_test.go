@@ -18,7 +18,7 @@ import (
 
 func TestUI001CollectionPickerMatchesApprovedScreen(t *testing.T) {
 	service := ui001WorkspaceService(t)
-	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
+	model := tui.New(service, tui.Options{Color: false})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "ui-001", "collection-picker.txt"))
@@ -32,7 +32,7 @@ func TestUI001CollectionPickerMatchesApprovedScreen(t *testing.T) {
 
 func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
 	service := ui001WorkspaceService(t)
-	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
+	model := tui.New(service, tui.Options{Color: false})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -73,7 +73,7 @@ func TestUI001ExampleWorkspaceDiscoversApprovedCollections(t *testing.T) {
 	}
 }
 
-func TestUI001ApprovedShellKeepsBrowseStateObservable(t *testing.T) {
+func TestUI001ApprovedLayoutKeepsBrowseStateObservable(t *testing.T) {
 	t.Run("search filters the same-named root group requests", func(t *testing.T) {
 		model := ui001SelectedCollectionModel(t)
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
@@ -120,7 +120,7 @@ func TestUI001ApprovedShellKeepsBrowseStateObservable(t *testing.T) {
 
 func ui001SelectedCollectionModel(t *testing.T) tea.Model {
 	t.Helper()
-	model := tui.New(ui001WorkspaceService(t), tui.Options{Color: false, ApprovedShell: true})
+	model := tui.New(ui001WorkspaceService(t), tui.Options{Color: false})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	return model
@@ -128,7 +128,7 @@ func ui001SelectedCollectionModel(t *testing.T) tea.Model {
 
 func TestUI001PreviewSkipsRequestWithInvalidGroupDiagnostics(t *testing.T) {
 	service := ui001InvalidGroupPreviewService(t)
-	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
+	model := tui.New(service, tui.Options{Color: false})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -168,6 +168,9 @@ func ui001ExampleWorkspaceRoot(t *testing.T) string {
 		}
 		if relativePath == "." {
 			return nil
+		}
+		if relativePath == ".git" || relativePath == ".apitool" {
+			return filepath.SkipDir
 		}
 		destination := filepath.Join(root, relativePath)
 		if entry.IsDir() {

@@ -51,19 +51,13 @@ func (m Model) View() string {
 	if m.mode == environmentPickerMode {
 		return m.environmentPickerView()
 	}
-	if m.approvedShell {
-		return m.collectionView()
-	}
-	left := m.treeLines()
-	rightTop := []string{"Request", fmt.Sprintf("Collection: %s", m.collection), fmt.Sprintf("Environment: %s", m.view.Environment), m.selectedRequest()}
-	if m.mode == searchMode {
-		rightTop = append(rightTop, "Search: "+m.query+"  (Enter select, Esc cancel)")
-	}
-	rightBottom := []string{"Response / diagnostics", m.message, "Focus: " + m.focusName(), "Tab panes • Ctrl+P collections • Ctrl+E environments • / search"}
-	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
+	return m.collectionView()
 }
 
 func (m Model) collectionView() string {
+	if m.service == nil {
+		return "No workspace is open\n"
+	}
 	width, height := m.width, m.height
 	if width == 0 {
 		width = 80
@@ -71,10 +65,10 @@ func (m Model) collectionView() string {
 	if height == 0 {
 		height = 24
 	}
-	leftWidth := 28
-	if m.explorer > 0 {
-		leftWidth = m.explorerWidth()
+	if height < 12 {
+		return m.compactCollectionView()
 	}
+	leftWidth := m.collectionExplorerWidth()
 	if leftWidth > width-12 {
 		leftWidth = width / 3
 	}
@@ -123,6 +117,20 @@ func (m Model) collectionView() string {
 	}
 	if responseDivider+2 < height {
 		right[responseDivider+2] = " Select Send to execute this request."
+		messageRows := 0
+		if m.message != "" {
+			message := []rune(m.message)
+			right[responseDivider+2] = string(message[:min(len(message), rightWidth)])
+			messageRows = 1
+			if len(message) > rightWidth && responseDivider+3 < height {
+				right[responseDivider+3] = string(message[rightWidth:])
+				messageRows++
+			}
+		}
+		warningRow := responseDivider + 2 + messageRows
+		if len(m.view.Tree.Invalid) != 0 && warningRow < height {
+			right[warningRow] = fmt.Sprintf(" %d warning(s) in collection", len(m.view.Tree.Invalid))
+		}
 	}
 	statusDivider := height - 4
 	if statusDivider+1 < height {
@@ -152,6 +160,16 @@ func (m Model) collectionView() string {
 		}
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func (m Model) compactCollectionView() string {
+	left := m.treeLines()
+	rightTop := []string{"Request", fmt.Sprintf("Collection: %s", m.collection), fmt.Sprintf("Environment: %s", m.view.Environment), m.selectedRequest()}
+	if m.mode == searchMode {
+		rightTop = append(rightTop, "Search: "+m.query+"  (Enter select, Esc cancel)")
+	}
+	rightBottom := []string{"Response / diagnostics", m.message, "Focus: " + m.focusName(), "Tab panes • Ctrl+P collections • Ctrl+E environments • / search"}
+	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
 }
 
 func (m Model) collectionTreeLines() []string {
@@ -257,6 +275,9 @@ func (m Model) previewRequest() (collection.RequestNode, bool) {
 	var requests []collection.RequestNode
 	for _, id := range m.view.Tree.RequestIDs {
 		request := m.view.Tree.Requests[id]
+		if !m.requestVisible(id) {
+			continue
+		}
 		if len(request.Diagnostics) != 0 {
 			continue
 		}
@@ -275,6 +296,14 @@ func (m Model) previewRequest() (collection.RequestNode, bool) {
 		return collection.RequestNode{}, false
 	}
 	return requests[0], true
+}
+
+func (m Model) collectionExplorerWidth() int {
+	width := m.explorer
+	if width == 0 {
+		width = 28
+	}
+	return clampExplorer(width, m.width)
 }
 
 func (m Model) activeRequest() (collection.RequestNode, bool) {

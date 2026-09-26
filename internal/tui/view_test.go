@@ -70,7 +70,7 @@ func TestSearchFiltersRequestsAndEscRestoresTree(t *testing.T) {
 func TestViewUsesWindowDimensionsForThreeSpatialRegions(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 24})
-	if got := m.View(); !strings.Contains(got, "Explorer") || !strings.Contains(got, "Request") || !strings.Contains(got, "Response / diagnostics") || !strings.Contains(got, "│") {
+	if got := m.View(); !strings.Contains(got, "Collections / tree") || !strings.Contains(got, "GET |") || !strings.Contains(got, "Response / Diagnostics / Request Log") || !strings.Contains(got, "│") {
 		t.Fatalf("layout = %q, want spatial explorer/request/response regions", got)
 	}
 }
@@ -78,9 +78,9 @@ func TestViewUsesWindowDimensionsForThreeSpatialRegions(t *testing.T) {
 func TestCtrlArrowsResizeExplorerSplitter(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 24})
-	before := strings.Index(m.View(), "│")
+	before := collectionDivider(m.View())
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
-	if after := strings.Index(m.View(), "│"); after <= before {
+	if after := collectionDivider(m.View()); after <= before {
 		t.Fatalf("splitter = %d after Ctrl+Right, want greater than %d", after, before)
 	}
 }
@@ -101,9 +101,14 @@ func TestWindowResizeClampsPersistedSplitter(t *testing.T) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
 	}
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 30, Height: 12})
-	if divider := strings.Index(m.View(), "│"); divider >= 30 || divider < 1 {
+	if divider := collectionDivider(m.View()); divider >= 30 || divider < 1 {
 		t.Fatalf("divider = %d after narrow resize, want within terminal width", divider)
 	}
+}
+
+func collectionDivider(view string) int {
+	line := strings.Split(view, "\n")[0]
+	return len([]rune(line[:strings.Index(line, "┬")]))
 }
 
 func TestSearchEnterOpensMatchingRequestEvenWhenItsGroupIsCollapsed(t *testing.T) {
@@ -203,7 +208,7 @@ func TestPendingStartingEnvironmentAppliesAfterColdPickerSelection(t *testing.T)
 func TestInvalidPendingStartingEnvironmentSurfacesErrorAfterColdPickerSelection(t *testing.T) {
 	m := tui.New(coldPickerService(t), tui.Options{StartingEnvironment: "missing"})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !strings.Contains(got, `has no environment "missing"`) {
+	if got := m.View(); !strings.Contains(got, `collection "payments" has no environment "missing`) {
 		t.Fatalf("cold picker = %q, want invalid environment error", got)
 	}
 }
