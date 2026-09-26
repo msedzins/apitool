@@ -16,7 +16,7 @@ import (
 
 func TestUI001CollectionPickerMatchesApprovedScreen(t *testing.T) {
 	service := ui001WorkspaceService(t)
-	model := tui.New(service, tui.Options{Color: false})
+	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "ui-001", "collection-picker.txt"))
@@ -30,7 +30,7 @@ func TestUI001CollectionPickerMatchesApprovedScreen(t *testing.T) {
 
 func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
 	service := ui001WorkspaceService(t)
-	model := tui.New(service, tui.Options{Color: false})
+	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -50,9 +50,62 @@ func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
 	}
 }
 
+func TestUI001ApprovedShellKeepsBrowseStateObservable(t *testing.T) {
+	t.Run("search filters the same-named root group requests", func(t *testing.T) {
+		model := ui001SelectedCollectionModel(t)
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("list")})
+		got := model.View()
+		if !strings.Contains(got, "Search: list") || !strings.Contains(got, "payments/list") || strings.Contains(got, "payments/create") {
+			t.Fatalf("search view = %q, want only the matching request", got)
+		}
+	})
+
+	t.Run("collapse and expand change the same-named root group tree", func(t *testing.T) {
+		model := ui001SelectedCollectionModel(t)
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+		if got := model.View(); strings.Contains(got, "GET list") || strings.Contains(got, "POST create") {
+			t.Fatalf("collapsed tree = %q, want root requests hidden", got)
+		}
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRight})
+		if got := model.View(); !strings.Contains(got, "GET list") || !strings.Contains(got, "POST create") {
+			t.Fatalf("expanded tree = %q, want root requests restored", got)
+		}
+	})
+
+	t.Run("request selection changes visible request state", func(t *testing.T) {
+		model := ui001SelectedCollectionModel(t)
+		for range 2 {
+			model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+		}
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if got := model.View(); !strings.Contains(got, "Request: payments/create") || !strings.Contains(got, "Focus: request") {
+			t.Fatalf("selected request view = %q, want payments/create request state", got)
+		}
+	})
+
+	t.Run("Ctrl+Right moves the splitter", func(t *testing.T) {
+		model := ui001SelectedCollectionModel(t)
+		before := strings.Index(model.View(), "┬")
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+		if after := strings.Index(model.View(), "┬"); after <= before {
+			t.Fatalf("splitter = %d after Ctrl+Right, want greater than %d", after, before)
+		}
+	})
+}
+
+func ui001SelectedCollectionModel(t *testing.T) tea.Model {
+	t.Helper()
+	model := tui.New(ui001WorkspaceService(t), tui.Options{Color: false, ApprovedShell: true})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	return model
+}
+
 func TestUI001PreviewSkipsRequestWithInvalidGroupDiagnostics(t *testing.T) {
 	service := ui001InvalidGroupPreviewService(t)
-	model := tui.New(service, tui.Options{Color: false})
+	model := tui.New(service, tui.Options{Color: false, ApprovedShell: true})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 

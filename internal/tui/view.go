@@ -51,7 +51,7 @@ func (m Model) View() string {
 	if m.mode == environmentPickerMode {
 		return m.environmentPickerView()
 	}
-	if m.hasCollectionRootGroup() {
+	if m.approvedShell {
 		return m.collectionView()
 	}
 	left := m.treeLines()
@@ -63,15 +63,6 @@ func (m Model) View() string {
 	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
 }
 
-func (m Model) hasCollectionRootGroup() bool {
-	for _, group := range m.view.Tree.Groups {
-		if group.ID == m.collection {
-			return true
-		}
-	}
-	return false
-}
-
 func (m Model) collectionView() string {
 	width, height := m.width, m.height
 	if width == 0 {
@@ -81,6 +72,9 @@ func (m Model) collectionView() string {
 		height = 24
 	}
 	leftWidth := 28
+	if m.explorer > 0 {
+		leftWidth = m.explorerWidth()
+	}
 	if leftWidth > width-12 {
 		leftWidth = width / 3
 	}
@@ -95,7 +89,7 @@ func (m Model) collectionView() string {
 	left, right := make([]string, height), make([]string, height)
 	if height > 1 {
 		left[1] = " Collections / tree"
-		if request, ok := m.previewRequest(); ok {
+		if request, ok := m.activeRequest(); ok {
 			right[1] = fmt.Sprintf(" %s | %-48s[ Send ]", request.Request.Method, request.Request.Request.URL)
 		}
 	}
@@ -110,7 +104,16 @@ func (m Model) collectionView() string {
 		left[row] = " " + line
 	}
 	if height > 5 {
-		if request, ok := m.previewRequest(); ok {
+		switch {
+		case m.mode == searchMode:
+			right[5] = " Search: " + m.query + "  (Enter select, Esc cancel)"
+		case m.selectedRequest() != "No request selected":
+			right[5] = " " + m.selectedRequest()
+		default:
+			request, ok := m.previewRequest()
+			if !ok {
+				break
+			}
 			right[5] = " Request: " + request.ID
 		}
 	}
@@ -128,6 +131,9 @@ func (m Model) collectionView() string {
 	}
 	if statusDivider+2 < height {
 		left[statusDivider+2] = " Ctrl+P collections"
+		if m.focus != collectionPane {
+			right[statusDivider+2] = " Focus: " + m.focusName()
+		}
 	}
 
 	lines := make([]string, 0, height)
@@ -150,6 +156,19 @@ func (m Model) collectionView() string {
 
 func (m Model) collectionTreeLines() []string {
 	lines := []string{"▾ " + m.collection}
+	if m.mode == searchMode {
+		for i, row := range m.visibleRows() {
+			if row.kind != requestRow {
+				continue
+			}
+			prefix := "  "
+			if i == m.treeIndex {
+				prefix = "> "
+			}
+			lines = append(lines, prefix+m.view.Tree.Requests[row.id].Request.Method+" "+row.id)
+		}
+		return lines
+	}
 	groups := append([]collection.GroupNode(nil), m.view.Tree.Groups...)
 	sort.SliceStable(groups, func(i, j int) bool {
 		if groups[i].ID == m.collection {
@@ -161,18 +180,36 @@ func (m Model) collectionTreeLines() []string {
 		return groups[i].ID < groups[j].ID
 	})
 	for _, group := range groups {
+		if !m.ancestorsExpanded(group.ID) {
+			continue
+		}
 		indent := strings.Repeat("  ", strings.Count(group.ID, "/")+1)
 		marker := "▸"
-		if group.ID == m.collection {
+		if m.expanded[group.ID] && m.groupHasContents(group.ID) {
 			marker = "▾"
 		}
 		lines = append(lines, indent+marker+" "+lastSegment(group.ID))
-		if group.ID != m.collection {
+		if !m.expanded[group.ID] {
 			continue
 		}
 		for _, request := range m.groupRequests(group.ID) {
-			lines = append(lines, indent+"  "+request.Request.Method+" "+lastSegment(request.ID))
+			prefix := "  "
+			if m.isSelectedRequest(request.ID) {
+				prefix = "> "
+			}
+			lines = append(lines, indent+prefix+request.Request.Method+" "+lastSegment(request.ID))
 		}
+	}
+	for _, id := range m.view.Tree.RequestIDs {
+		request := m.view.Tree.Requests[id]
+		if len(request.Groups) != 0 || !m.requestVisible(id) {
+			continue
+		}
+		prefix := "  "
+		if m.isSelectedRequest(id) {
+			prefix = "> "
+		}
+		lines = append(lines, prefix+request.Request.Method+" "+id)
 	}
 	for _, collection := range m.collections {
 		if collection != m.collection {
@@ -180,6 +217,11 @@ func (m Model) collectionTreeLines() []string {
 		}
 	}
 	return lines
+}
+
+func (m Model) isSelectedRequest(id string) bool {
+	rows := m.visibleRows()
+	return m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == requestRow && rows[m.treeIndex].id == id
 }
 
 func (m Model) groupRequests(groupID string) []collection.RequestNode {
@@ -197,6 +239,18 @@ func (m Model) groupRequests(groupID string) []collection.RequestNode {
 		return requests[i].Request.Method < requests[j].Request.Method
 	})
 	return requests
+}
+
+func (m Model) groupHasContents(groupID string) bool {
+	if len(m.groupRequests(groupID)) != 0 {
+		return true
+	}
+	for _, group := range m.view.Tree.Groups {
+		if parent(group.ID) == groupID {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) previewRequest() (collection.RequestNode, bool) {
@@ -221,6 +275,14 @@ func (m Model) previewRequest() (collection.RequestNode, bool) {
 		return collection.RequestNode{}, false
 	}
 	return requests[0], true
+}
+
+func (m Model) activeRequest() (collection.RequestNode, bool) {
+	rows := m.visibleRows()
+	if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == requestRow {
+		return m.view.Tree.Requests[rows[m.treeIndex].id], true
+	}
+	return m.previewRequest()
 }
 
 func lastSegment(value string) string {
