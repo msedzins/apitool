@@ -260,7 +260,7 @@ Exactly one pane heading displays `▶` at a time; the marker follows the focus 
 **Viewport:** 100 columns × 30 rows<br>
 **Snapshot candidate:** true
 
-The candidate baseline paths are `testdata/ui-015/collection-focus.txt`, `testdata/ui-015/request-focus.txt`, and `testdata/ui-015/response-focus.txt`. The snapshot tests read these files directly.
+The collection-focus baseline is the existing `testdata/ui-001/payments-tree.txt`; update it to include the marker when this behavior is implemented. The new request- and response-focus baselines will be `testdata/ui-015/request-focus.txt` and `testdata/ui-015/response-focus.txt`. Snapshot tests read these files directly.
 
 <a id="ui-018"></a>
 ## UI-018 — Keep keyboard help usable in a small terminal

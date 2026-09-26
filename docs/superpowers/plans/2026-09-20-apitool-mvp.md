@@ -568,13 +568,13 @@ Implement keyboard help and pane-focus behavior from the design specification. `
 
 - [ ] **Step 4: Add navigation and accessibility tests**
 
-Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add focused tests for opening help from every TUI mode; closing it with `?` or `Esc` and restoring the underlying view; verifying unsupported keys do not dismiss or mutate the obscured view; confirming `Ctrl+C` exits; checking exactly one focus marker through the full Tab cycle without color; and verifying compact help fits at the 80×24 acceptance viewport. Add candidate 100×30 baselines under `testdata/ui-015/` for collection, help, request, and response focus. Review and approve those files before treating them as canonical; snapshot tests must read the committed files directly as their sole visual source of truth: `collection-focus.txt`, `keyboard-help.txt`, `request-focus.txt`, and `response-focus.txt`.
+Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add focused tests for opening help from every TUI mode; closing it with `?` or `Esc` and restoring the underlying view; verifying unsupported keys do not dismiss or mutate the obscured view; confirming `Ctrl+C` exits; checking exactly one focus marker through the full Tab cycle without color; and verifying compact help fits at the 80×24 acceptance viewport. Update the existing `testdata/ui-001/payments-tree.txt` baseline for the collection-focus marker and add candidate 100×30 baselines under `testdata/ui-015/` for keyboard help, request focus, and response focus. Review and approve new or updated baseline files before treating them as canonical; snapshot tests must read the committed files directly as their sole visual source of truth.
 
 - [ ] **Step 5: Run TUI tests and manual smoke test**
 
 Run: `go test ./internal/tui -count=1 && go test ./... && go run ./cmd/apitool --help`
 
-Expected: PASS; help lists `--env` and `--confirm-dangerous`, and the TUI suite validates all four approved screen snapshot candidates.
+Expected: PASS; help lists `--env` and `--confirm-dangerous`, and the TUI suite validates the updated collection screen and three new approved screen baselines.
 
 - [ ] **Step 6: Commit TUI shell**
 
