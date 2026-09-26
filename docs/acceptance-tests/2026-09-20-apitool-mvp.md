@@ -273,7 +273,7 @@ The candidate baseline paths are `testdata/ui-015/collection-focus.txt`, `testda
 
 ### Given
 
-The terminal viewport is smaller than 100 columns × 30 rows.
+The terminal viewport is 80 columns × 24 rows.
 
 ### When
 
