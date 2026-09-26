@@ -32,9 +32,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if x.Type == tea.KeyCtrlC {
 			return m, tea.Quit
 		}
+		if m.help {
+			if x.Type == tea.KeyEsc || (x.Type == tea.KeyRunes && string(x.Runes) == "?") {
+				m.help = false
+			}
+			return m, nil
+		}
+		if x.Type == tea.KeyRunes && string(x.Runes) == "?" {
+			m.help = true
+			return m, nil
+		}
 		m.handleKey(x)
 	case tea.MouseMsg:
-		m.handleMouse(x)
+		if !m.help {
+			m.handleMouse(x)
+		}
 	}
 	m.syncViewport()
 	return m, nil
