@@ -109,7 +109,7 @@ func TestLeftAndRightToggleExpandedTreeGroup(t *testing.T) {
 		t.Fatalf("collapsed View() = %q, should hide grouped request", got)
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if got := m.View(); !strings.Contains(got, "billing/nested") {
+	if got := m.View(); !strings.Contains(got, "GET nested") {
 		t.Fatalf("expanded View() = %q, should restore grouped request", got)
 	}
 }
