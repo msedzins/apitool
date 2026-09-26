@@ -27,15 +27,15 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 
 | Test case | Category | Observable surface | Requirements | Tasks | Status |
 |---|---|---|---|---|---|
-| [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | planned |
+| [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | implemented |
 | [UI-002 — Keep invalid definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
 | [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | planned |
 | [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008 | planned |
-| [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | planned |
-| [UI-016 — Restore the prior view after closing help](#ui-016) | UI | TUI | R-011 | T-008 | planned |
-| [UI-017 — Show the active pane during keyboard navigation](#ui-017) | UI | TUI | R-011 | T-008 | planned |
-| [UI-018 — Keep keyboard help usable in a small terminal](#ui-018) | UI | TUI | R-011 | T-008 | planned |
-| [UI-019 — Exit while keyboard help is open](#ui-019) | UI | TUI | R-011 | T-008 | planned |
+| [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | implemented |
+| [UI-016 — Restore the prior view after closing help](#ui-016) | UI | TUI | R-011 | T-008 | implemented |
+| [UI-017 — Show the active pane during keyboard navigation](#ui-017) | UI | TUI | R-011 | T-008 | implemented |
+| [UI-018 — Keep keyboard help usable in a small terminal](#ui-018) | UI | TUI | R-011 | T-008 | implemented |
+| [UI-019 — Exit while keyboard help is open](#ui-019) | UI | TUI | R-011 | T-008 | implemented |
 | [CFG-001 — Save a valid request edit](#cfg-001) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-002 — Block invalid configuration](#cfg-002) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-003 — Block literal client secrets](#cfg-003) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
@@ -74,7 +74,7 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 **Observable surface:** TUI<br>
 **Requirements:** R-001<br>
 **Tasks:** T-002, T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -186,7 +186,7 @@ Vim bindings are optional.
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -205,9 +205,9 @@ Keyboard help appears over the current view and lists the navigation, workspace,
 **Visual state:** required<br>
 **Viewport:** 100 columns × 30 rows<br>
 **Visual approval:** approved<br>
-**Snapshot baseline:** `testdata/ui-015/keyboard-help.txt`
+**Snapshot baseline:** [keyboard-help.txt](../../testdata/ui-015/keyboard-help.txt)
 
-The approved help-overlay snapshot represents the collection view. Semantic coverage also opens help from each listed mode.
+The approved help-overlay snapshot represents the collection view. The collection picker, environment picker, and search modes are covered semantically: each opens help and verifies that closing it restores the exact prior state.
 
 <a id="ui-016"></a>
 ## UI-016 — Restore the prior view after closing help
@@ -216,7 +216,7 @@ The approved help-overlay snapshot represents the collection view. Semantic cove
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -230,6 +230,10 @@ The user presses `Tab`, then closes help with `Esc` or `?`.
 
 Help remains open after `Tab`; when it is closed, the previous mode returns with its selection, query, and active pane unchanged.
 
+### Visual baseline
+
+None. This is a state-restoration behavior; tests compare the full view before opening help with the view after closing it.
+
 ### Notes
 
 Exercise the collection picker, environment picker, search, and collection view so restoration is checked across every mode supported by UI-015.
@@ -241,7 +245,7 @@ Exercise the collection picker, environment picker, search, and collection view 
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -260,7 +264,7 @@ Exactly one pane heading displays `▶` at a time; the marker follows the focus 
 **Visual state:** required<br>
 **Viewport:** 100 columns × 30 rows<br>
 **Visual approval:** approved<br>
-**Snapshot baselines:** `testdata/ui-001/payments-tree.txt`, `testdata/ui-015/request-focus.txt`, `testdata/ui-015/response-focus.txt`
+**Snapshot baselines:** [collection focus — payments-tree.txt](../../testdata/ui-001/payments-tree.txt), [request focus — request-focus.txt](../../testdata/ui-015/request-focus.txt), and [response focus — response-focus.txt](../../testdata/ui-015/response-focus.txt)
 
 These approved files show the collection, request, and response panes focused in turn. Snapshot tests read these files directly.
 
@@ -271,7 +275,7 @@ These approved files show the collection, request, and response panes focused in
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -296,7 +300,7 @@ This responsive state is checked at a smaller viewport; it has no fixed-size app
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -1026,15 +1030,15 @@ It uses no secrets, artifacts, releases, or version matrix.
 
 | Test case | Category | Observable surface | Requirement | Task | Status |
 |---|---|---|---|---|---|
-| UI-001 | UI | TUI | R-001 | T-002, T-008 | planned |
+| UI-001 | UI | TUI | R-001 | T-002, T-008 | implemented |
 | UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
 | UI-003 | UI | TUI | R-004 | T-002, T-008 | planned |
 | UI-004 | UI | TUI | R-011 | T-008 | planned |
-| UI-015 | UI | TUI | R-011 | T-008 | planned |
-| UI-016 | UI | TUI | R-011 | T-008 | planned |
-| UI-017 | UI | TUI | R-011 | T-008 | planned |
-| UI-018 | UI | TUI | R-011 | T-008 | planned |
-| UI-019 | UI | TUI | R-011 | T-008 | planned |
+| UI-015 | UI | TUI | R-011 | T-008 | implemented |
+| UI-016 | UI | TUI | R-011 | T-008 | implemented |
+| UI-017 | UI | TUI | R-011 | T-008 | implemented |
+| UI-018 | UI | TUI | R-011 | T-008 | implemented |
+| UI-019 | UI | TUI | R-011 | T-008 | implemented |
 | CFG-001 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-002 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-003 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
