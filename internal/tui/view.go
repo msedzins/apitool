@@ -113,15 +113,109 @@ func pad(s string, n int) string {
 }
 func (m Model) focusName() string { return []string{"collection", "request", "response"}[m.focus] }
 func (m Model) collectionPickerView() string {
-	lines := []string{"Collections"}
-	for i, n := range m.collections {
-		p := "  "
-		if i == m.collectionIndex {
-			p = "> "
-		}
-		lines = append(lines, p+n)
+	width, height := m.width, m.height
+	if width == 0 {
+		width = 80
 	}
-	return strings.Join(lines, "\n")
+	if height == 0 {
+		height = 24
+	}
+	leftWidth := 28
+	if leftWidth > width-12 {
+		leftWidth = width / 3
+	}
+	if leftWidth < 1 {
+		leftWidth = 1
+	}
+	rightWidth := width - leftWidth - 3
+	if rightWidth < 1 {
+		rightWidth = 1
+	}
+	divider := height - 5
+	if divider < 1 {
+		divider = 1
+	}
+
+	left, right := make([]string, height), make([]string, height)
+	left[1], right[1] = " Collections / tree", " apitool"
+	right[3], right[4] = "  Collection picker", "  Select a collection to open"
+	for i, collection := range m.collections {
+		if 3+i >= divider {
+			break
+		}
+		left[3+i] = "  ▸ " + collection
+	}
+	if divider+1 < height {
+		left[divider+1], right[divider+1] = " Ctrl+P collections", " No collection selected"
+	}
+	if divider+2 < height {
+		left[divider+2] = " ↑/↓ navigate • Enter open"
+	}
+
+	picker := m.collectionPickerLines(rightWidth)
+	start := (rightWidth - len([]rune(picker[0]))) / 2
+	if start < 0 {
+		start = 0
+	}
+	for i, line := range picker {
+		row := 6 + i
+		if row >= divider {
+			break
+		}
+		right[row] = strings.Repeat(" ", start) + line
+	}
+
+	lines := make([]string, 0, height)
+	for row := 0; row < height; row++ {
+		switch row {
+		case 0:
+			lines = append(lines, "┌"+strings.Repeat("─", leftWidth)+"┬"+strings.Repeat("─", rightWidth)+"┐")
+		case divider:
+			lines = append(lines, "├"+strings.Repeat("─", leftWidth)+"┼"+strings.Repeat("─", rightWidth)+"┤")
+		case height - 1:
+			lines = append(lines, "└"+strings.Repeat("─", leftWidth)+"┴"+strings.Repeat("─", rightWidth)+"┘")
+		default:
+			lines = append(lines, "│"+pad(left[row], leftWidth)+"│"+pad(right[row], rightWidth)+"│")
+		}
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func (m Model) collectionPickerLines(available int) []string {
+	const pickerWidth = 36
+	width := pickerWidth
+	if width > available {
+		width = available
+	}
+	if width < 2 {
+		return []string{strings.Repeat(" ", width)}
+	}
+	contentWidth := width - 2
+	line := func(value string) string { return "│" + pad(value, contentWidth) + "│" }
+	lines := []string{"┌" + strings.Repeat("─", contentWidth) + "┐", line(" Collections")}
+	for i, path := range m.collections {
+		lines = append(lines, line(""))
+		marker := "   "
+		if i == m.collectionIndex {
+			marker = " > "
+		}
+		lines = append(lines, line(marker+path))
+		lines = append(lines, line("  "+m.collectionDisplayName(path)))
+		lines = append(lines, line("  "+path+"/.api"))
+	}
+	lines = append(lines, line(""), line(" ↑/↓ move   Enter open   Esc close"), "└"+strings.Repeat("─", contentWidth)+"┘")
+	return lines
+}
+
+func (m Model) collectionDisplayName(path string) string {
+	if m.service != nil {
+		if workspace, err := m.service.Workspace(); err == nil {
+			if view, ok := workspace.Collections[path]; ok && view.Collection.Name != "" {
+				return view.Collection.Name
+			}
+		}
+	}
+	return path
 }
 func (m Model) environmentPickerView() string {
 	lines := []string{"Environments"}
