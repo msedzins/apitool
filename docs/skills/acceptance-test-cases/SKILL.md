@@ -32,7 +32,9 @@ In a Superpowers project this is normally the relevant file under
 
 The requirements define **what** must be true. The design document defines the
 intended flows and boundaries that make the requirement testable. The plan
-identifies **which task** owns the work.
+identifies **which task** owns the work. Acceptance cases and visual baselines
+refine verification detail; they do not supersede requirements or introduce
+unrelated product behavior.
 
 If a design document is missing, ask for it or ask the user to explicitly
 authorize deriving cases from requirements alone. Do not substitute code,
@@ -56,7 +58,8 @@ implementation instructions, or a test runner specification.
 1. Extract discrete requirements from the specification. Assign stable IDs if
    they do not already exist: `R-001`, `R-002`, and so on.
 2. Read the design document and identify observable flows, state transitions,
-   boundaries, safety guarantees, failure behavior, and UI/TUI states.
+   boundaries, safety guarantees, failure behavior, and UI/TUI states that are
+   supported by the requirements.
 3. Read the implementation plan and map each relevant requirement and design
    behavior to its task IDs: `T-001`, `T-002`, and so on. A task is evidence of
    planned ownership, not a source of expected behavior.
@@ -94,7 +97,8 @@ Include cases for:
 - stated security, privacy, validation, isolation, or confirmation guarantees;
 - important error handling and graceful-degradation behavior;
 - interaction boundaries between architectural components;
-- UI/TUI states explicitly required by the specification.
+- UI/TUI states explicitly required by the specification, plus approved
+  requirement-derived fallback screens described below.
 
 Do not create cases for private helper behavior, function names, package
 boundaries, incidental formatting, or every combination of input values.
@@ -159,23 +163,32 @@ belongs in unit or integration tests unless it is a supported internal API.
 ## UI and TUI cases
 
 For a required visual or rendered state, make the expected state explicit in
-`Then`. Mark it as a snapshot candidate when stable rendered output would be
-an appropriate approval artifact:
+`Then`. First reuse an existing approved screen baseline when it proves the
+same requirement-derived scenario. Mark a stable rendered state as a snapshot
+candidate when a new approval artifact is appropriate:
 
 ```yaml
 snapshot_candidate: true
 ```
 
-### Approved visual baselines before implementation
+### Approved visual baselines and fallback screens
 
-In a feature PR, add acceptance cases and proposed screen baselines early;
-obtain user approval before marking screens approved. Store each screen once
-in the canonical snapshot location and link it from the case. Finish the UI
-implementation later in the same PR, even if CI is temporarily red; require
-relevant CI checks to pass before completion or merge. A baseline records the
-approved target, not proof that the app renders or matches it. Keep cases
-`planned` until implementation is complete, and never claim a passing visual
-comparison without verification.
+When a requirement needs a TUI screen but the specification has no suitable
+approved baseline, an acceptance case may propose a fallback screen. Its
+rendered state must follow directly from a named requirement: it may make that
+required outcome observable, but must not add user actions, data, permissions,
+or semantics. Record the requirement ID and the derivation in the case, mark
+the screen `proposed`, and obtain user approval before marking it `approved`.
+If the screen cannot be derived directly, report an ambiguity and request a
+decision instead of inventing the behavior.
+
+In a feature PR, add proposed fallback screens early. Store each approved
+screen once in the canonical snapshot location and link it from the case.
+Finish the UI implementation later in the same PR, even if CI is temporarily
+red; require relevant CI checks to pass before completion or merge. A baseline
+records the approved target, not proof that the app renders or matches it.
+Keep cases `planned` until implementation is complete, and never claim a
+passing visual comparison without verification.
 
 ## Traceability report
 
@@ -214,6 +227,17 @@ those behaviors to their `UI-xxx` cases.
 The independent Step 2 review report may use acceptance-case IDs because it
 verifies acceptance status; it is not an implementation plan.
 
+## Reusable plan-boundary guard
+
+For Go repositories, copy
+[`assets/plan_boundary_test.go`](assets/plan_boundary_test.go) to the
+repository root as `plan_boundary_test.go`, and set its package declaration to
+the repository's root test package. The template is the canonical source for a
+table-driven guard: add a rule for each document boundary, with a document
+glob, forbidden expression, and policy name. Its default rule keeps
+implementation plans free of acceptance-case IDs. The root copy is required so
+`go test ./...` enforces the policy.
+
 ## Quality check
 
 Before finishing, confirm each case:
@@ -229,4 +253,4 @@ Before finishing, confirm each case:
 - does not invent behavior to make a case complete.
 - has an independent Step 2 review result before it is marked `implemented`.
 - has no acceptance-case identifiers in the implementation plan. Verify with
-  `go test . -run TestImplementationPlansDoNotContainAcceptanceCaseIDs`.
+  `go test . -run TestDocumentBoundaries`.

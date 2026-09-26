@@ -1,4 +1,4 @@
-package apitool_test
+package boundary_test
 
 import (
 	"os"
