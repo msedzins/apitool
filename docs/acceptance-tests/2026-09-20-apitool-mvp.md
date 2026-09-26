@@ -244,7 +244,7 @@ Exercise the collection picker, environment picker, search, and collection view 
 
 ### Given
 
-A collection is open in a 100 columns × 30 rows TUI without color support.
+A collection is open in a 100 columns × 30 rows TUI without color support, with the collection pane focused.
 
 ### When
 
