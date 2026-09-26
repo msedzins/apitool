@@ -264,7 +264,7 @@ Exactly one pane heading displays `▶` at a time; the marker follows the focus 
 **Visual state:** required<br>
 **Viewport:** 100 columns × 30 rows<br>
 **Visual approval:** approved<br>
-**Snapshot baselines:** [collection focus — payments-tree.txt](../../testdata/ui-001/payments-tree.txt), [request focus — request-focus.txt](../../testdata/ui-015/request-focus.txt), and [response focus — response-focus.txt](../../testdata/ui-015/response-focus.txt)
+**Snapshot baselines:** collection focus reuses the canonical [UI-001 payments-tree.txt](../../testdata/ui-001/payments-tree.txt); [request focus — request-focus.txt](../../testdata/ui-017/request-focus.txt) and [response focus — response-focus.txt](../../testdata/ui-017/response-focus.txt) are owned by UI-017.
 
 These approved files show the collection, request, and response panes focused in turn. Snapshot tests read these files directly.
 

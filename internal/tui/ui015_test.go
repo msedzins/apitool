@@ -16,10 +16,10 @@ func TestUI015FocusMarkersMatchApprovedScreens(t *testing.T) {
 	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-001", "payments-tree.txt"))
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
-	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-015", "request-focus.txt"))
+	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-017", "request-focus.txt"))
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
-	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-015", "response-focus.txt"))
+	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-017", "response-focus.txt"))
 }
 
 func TestUI015HelpRestoresEveryTUIState(t *testing.T) {
