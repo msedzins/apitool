@@ -49,20 +49,42 @@ requirement -> implementation task -> acceptance test case
 The test cases are a behavioral contract. They are not unit-test outlines,
 implementation instructions, or a test runner specification.
 
-## Workflow
+## Required two-step flow
+
+### Step 1: Design or update the scenarios
 
 1. Extract discrete requirements from the specification. Assign stable IDs if
    they do not already exist: `R-001`, `R-002`, and so on.
 2. Read the design document and identify observable flows, state transitions,
    boundaries, safety guarantees, failure behavior, and UI/TUI states.
 3. Read the implementation plan and map each relevant requirement and design
-   behavior to its task
-   IDs: `T-001`, `T-002`, and so on. A task is evidence of planned ownership,
-   not a source of expected behavior.
+   behavior to its task IDs: `T-001`, `T-002`, and so on. A task is evidence of
+   planned ownership, not a source of expected behavior.
 4. Generate only the cases needed to make the requirements verifiable. Prefer
    one meaningful case per behavior over many near-duplicate cases.
 5. Report requirements with no case and tasks with no mapped case. Do not fill
    gaps by reading code.
+
+### Step 2: Independent scenario-status review
+
+After implementation, run a fresh review subagent before changing any case to
+`implemented`. Give it the acceptance suite, authoritative documents, plan,
+implementation diff or branch, relevant test commands, and any required
+screen-baseline locations.
+
+The reviewer may inspect code, tests, test output, and snapshots only to
+verify delivery and status; it must not use them to redefine expected behavior.
+For every mapped test case, the reviewer must record:
+
+| Test case | Verified status | Evidence | Missing or blocked work |
+|---|---|---|---|
+| UI-001 | planned or implemented | exact test, snapshot, or manual verification result | task, fixture, behavior, or none |
+
+The reviewer verifies that the delivered behavior proves the scenario's
+`Then`, the mapped task actually covers it, required fixtures or baselines
+exist and are linked, and verification results are current. The scenario
+author updates statuses only from this report. If review evidence is absent,
+incomplete, or failing, keep the case `planned` and report the gap.
 
 ## Case selection
 
@@ -91,9 +113,10 @@ category, observable surface, requirement IDs, task IDs, and status. Link the
 name to the case's explicit HTML anchor in the same file. Keep each case
 readable without source code.
 
-Use `planned` until the mapped task is delivered; use `implemented` only when
-the implementation is known to be complete from the plan/status provided by
-the user. Do not infer status by inspecting code.
+New and changed cases begin as `planned`. Use `implemented` only when the
+independent Step 2 review records current evidence that the delivered behavior
+proves the case. A task name, a claimed task status, or a passing unrelated
+test is not enough.
 
 ## Observable-contract ontology
 
@@ -168,18 +191,28 @@ Also list, separately:
 - tasks without mapped acceptance coverage;
 - ambiguities that block a trustworthy case.
 
+For Step 2, include the independent review table and retain its exact evidence
+with the PR or review report.
+
 ## Keep acceptance cases and implementation plans distinct
 
 The acceptance-test document owns stable case IDs, BDD scenarios, and the
 requirement-to-task-to-case mapping. The implementation plan owns the work to
 build and verify the behavior. Describe that work by behavior and implementation
 verification, without copying acceptance-case IDs or restating their scenarios.
+Implementation plans must not contain acceptance-case IDs (`UI-xxx`,
+`API-xxx`, `CFG-xxx`, `DATA-xxx`, `WF-xxx`, or `OPS-xxx`), including when
+identifying fixture ownership or describing verification. They may reference
+requirements, task IDs, behavior, concrete test commands, and fixture paths.
 Keep case-ID traceability in the acceptance-test index and report; refer to the
 design behavior in the implementation plan when context is needed.
 
 For example, write “test opening help from each TUI mode and restoring the
 previous view” in the implementation plan, while the acceptance document maps
 those behaviors to their `UI-xxx` cases.
+
+The independent Step 2 review report may use acceptance-case IDs because it
+verifies acceptance status; it is not an implementation plan.
 
 ## Quality check
 
@@ -194,3 +227,6 @@ Before finishing, confirm each case:
   database, CI, or supported-internal-API surface;
 - does not prescribe implementation details;
 - does not invent behavior to make a case complete.
+- has an independent Step 2 review result before it is marked `implemented`.
+- has no acceptance-case identifiers in the implementation plan. Verify with
+  `go test . -run TestImplementationPlansDoNotContainAcceptanceCaseIDs`.

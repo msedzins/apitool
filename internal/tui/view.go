@@ -45,13 +45,18 @@ func statusColor(c int) lipgloss.Color {
 	return "10"
 }
 func (m Model) View() string {
+	var view string
 	if m.mode == collectionPickerMode {
-		return m.collectionPickerView()
+		view = m.collectionPickerView()
+	} else if m.mode == environmentPickerMode {
+		view = m.environmentPickerView()
+	} else {
+		view = m.collectionView()
 	}
-	if m.mode == environmentPickerMode {
-		return m.environmentPickerView()
+	if m.help {
+		return m.helpView(view)
 	}
-	return m.collectionView()
+	return view
 }
 
 func (m Model) collectionView() string {
@@ -82,9 +87,13 @@ func (m Model) collectionView() string {
 
 	left, right := make([]string, height), make([]string, height)
 	if height > 1 {
-		left[1] = " Collections / tree"
+		left[1] = paneHeading(m.focus == collectionPane, "Collections / tree")
 		if request, ok := m.activeRequest(); ok {
-			right[1] = fmt.Sprintf(" %s | %-48s[ Send ]", request.Request.Method, request.Request.Request.URL)
+			urlWidth := 48
+			if m.focus == requestPane {
+				urlWidth = 46
+			}
+			right[1] = fmt.Sprintf("%s%s | %-*s[ Send ]", panePrefix(m.focus == requestPane), request.Request.Method, urlWidth, request.Request.Request.URL)
 		}
 	}
 	if height > 3 {
@@ -113,7 +122,7 @@ func (m Model) collectionView() string {
 	}
 	responseDivider := 8
 	if responseDivider < height {
-		right[responseDivider+1] = " Response / Diagnostics / Request Log"
+		right[responseDivider+1] = paneHeading(m.focus == responsePane, "Response / Diagnostics / Request Log")
 	}
 	if responseDivider+2 < height {
 		right[responseDivider+2] = " Select Send to execute this request."
@@ -139,7 +148,7 @@ func (m Model) collectionView() string {
 	}
 	if statusDivider+2 < height {
 		left[statusDivider+2] = " Ctrl+P collections"
-		if m.focus != collectionPane {
+		if m.focus != collectionPane && m.message != "" {
 			right[statusDivider+2] = " Focus: " + m.focusName()
 		}
 	}
@@ -160,6 +169,67 @@ func (m Model) collectionView() string {
 		}
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func panePrefix(active bool) string {
+	if active {
+		return " ▶ "
+	}
+	return " "
+}
+
+func paneHeading(active bool, text string) string { return panePrefix(active) + text }
+
+func (m Model) helpView(background string) string {
+	if m.mode != browseMode || m.width < 100 || m.height < 30 {
+		return compactHelpView()
+	}
+
+	lines := strings.Split(strings.TrimSuffix(background, "\n"), "\n")
+	overlay := []string{
+		"┌" + strings.Repeat("─", 50) + "┐",
+		"│" + pad("                Keyboard shortcuts                ", 50) + "│",
+		"├" + strings.Repeat("─", 50) + "┤",
+		"│ Navigation  ↑/↓ move • Enter open                │",
+		"│ Focus       Tab switch panes                     │",
+		"│ Tree        ←/→ expand/collapse                  │",
+		"│ Workspace   Ctrl+P collections                   │",
+		"│ Environment Ctrl+E select env                    │",
+		"│ Search      / find request                       │",
+		"│ Layout      Ctrl+←/→ resize split                │",
+		"│ Help        ? or Esc close                       │",
+		"│ Exit        Ctrl+C quit                          │",
+		"└" + strings.Repeat("─", 50) + "┘",
+	}
+	for row, line := range overlay {
+		lineIndex := row + 8
+		if lineIndex >= len(lines) {
+			break
+		}
+		base := []rune(lines[lineIndex])
+		box := []rune(line)
+		if len(base) < 24+len(box) {
+			continue
+		}
+		copy(base[24:], box)
+		lines[lineIndex] = string(base)
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func compactHelpView() string {
+	return strings.Join([]string{
+		"Keyboard shortcuts",
+		"Navigation  ↑/↓ move • Enter open",
+		"Focus       Tab switch panes",
+		"Tree        ←/→ expand/collapse",
+		"Workspace   Ctrl+P collections",
+		"Environment Ctrl+E select env",
+		"Search      / find request",
+		"Layout      Ctrl+←/→ resize split",
+		"Help        ? or Esc close",
+		"Exit        Ctrl+C quit",
+	}, "\n") + "\n"
 }
 
 func (m Model) compactCollectionView() string {

@@ -57,6 +57,7 @@ type Model struct {
 	height                                       int
 	explorer                                     int
 	message                                      string
+	help                                         bool
 }
 
 // New creates a shell around a workspace already opened by service.

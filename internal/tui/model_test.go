@@ -75,8 +75,8 @@ func TestOptionsStartingEnvironmentSelectsEnvironment(t *testing.T) {
 func TestTabCyclesPanes(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if got := m.View(); !containsAll(got, "Focus: request") {
-		t.Fatalf("View() = %q, want request pane focus after Tab", got)
+	if got := m.View(); !containsAll(got, "▶ GET |") {
+		t.Fatalf("View() = %q, want request heading marked after Tab", got)
 	}
 }
 
