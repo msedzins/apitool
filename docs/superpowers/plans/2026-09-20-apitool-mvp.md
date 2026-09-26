@@ -568,7 +568,7 @@ Add the UI-015 keyboard-help overlay and pane-focus contract from the design spe
 
 - [ ] **Step 4: Add navigation and accessibility tests**
 
-Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add UI-015 coverage that `?` opens help from browse, collection picker, environment picker, and search; `?` and `Esc` close it without changing the underlying selection, query, environment, or focus; `Ctrl+C` quits while help is visible; and each Tab state has exactly one `▶` pane marker without color. Add exact 100×30 snapshot tests for collection focus, keyboard help, request focus, and response focus.
+Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add UI-015 coverage that `?` opens help from browse, collection picker, environment picker, and search; `?` and `Esc` close it without changing the underlying selection, query, environment, or focus; `Ctrl+C` quits while help is visible; and each Tab state has exactly one `▶` pane marker without color. Add the four approved 100×30 screen baselines under `testdata/ui-015/` and make snapshot tests read those committed files directly as their sole visual source of truth: `collection-focus.txt`, `keyboard-help.txt`, `request-focus.txt`, and `response-focus.txt`.
 
 - [ ] **Step 5: Run TUI tests and manual smoke test**
 

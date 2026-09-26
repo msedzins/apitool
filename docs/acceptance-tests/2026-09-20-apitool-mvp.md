@@ -203,7 +203,7 @@ Keyboard help lists navigation, workspace, search, layout, help, and exit contro
 **Interaction:** keyboard; `?` opens help, `Esc` or `?` closes it, and `Tab` changes focus.<br>
 **Snapshot candidate:** true
 
-The canonical future snapshots are the four UI-015 states defined in the design specification: collection focus, keyboard help, request focus, and response focus. They are not added until Task 8 implementation begins.
+The canonical future 100×30 snapshots are `testdata/ui-015/collection-focus.txt`, `testdata/ui-015/keyboard-help.txt`, `testdata/ui-015/request-focus.txt`, and `testdata/ui-015/response-focus.txt`. Task 8 adds these approved baselines and snapshot tests that read them directly; the screen contents will not be duplicated in this acceptance document.
 
 ### Notes
 
