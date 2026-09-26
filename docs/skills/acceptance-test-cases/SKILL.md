@@ -200,12 +200,19 @@ The acceptance-test document owns stable case IDs, BDD scenarios, and the
 requirement-to-task-to-case mapping. The implementation plan owns the work to
 build and verify the behavior. Describe that work by behavior and implementation
 verification, without copying acceptance-case IDs or restating their scenarios.
+Implementation plans must not contain acceptance-case IDs (`UI-xxx`,
+`API-xxx`, `CFG-xxx`, `DATA-xxx`, `WF-xxx`, or `OPS-xxx`), including when
+identifying fixture ownership or describing verification. They may reference
+requirements, task IDs, behavior, concrete test commands, and fixture paths.
 Keep case-ID traceability in the acceptance-test index and report; refer to the
 design behavior in the implementation plan when context is needed.
 
 For example, write “test opening help from each TUI mode and restoring the
 previous view” in the implementation plan, while the acceptance document maps
 those behaviors to their `UI-xxx` cases.
+
+The independent Step 2 review report may use acceptance-case IDs because it
+verifies acceptance status; it is not an implementation plan.
 
 ## Quality check
 
@@ -221,3 +228,5 @@ Before finishing, confirm each case:
 - does not prescribe implementation details;
 - does not invent behavior to make a case complete.
 - has an independent Step 2 review result before it is marked `implemented`.
+- has no acceptance-case identifiers in the implementation plan. Verify with
+  `go test . -run TestImplementationPlansDoNotContainAcceptanceCaseIDs`.
