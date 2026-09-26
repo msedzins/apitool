@@ -143,8 +143,16 @@ an appropriate approval artifact:
 snapshot_candidate: true
 ```
 
-This skill defines the case and expected snapshot intent. It does not generate,
-approve, compare, or update snapshots.
+### Approved visual baselines before implementation
+
+In a feature PR, add acceptance cases and proposed screen baselines early;
+obtain user approval before marking screens approved. Store each screen once
+in the canonical snapshot location and link it from the case. Finish the UI
+implementation later in the same PR, even if CI is temporarily red; require
+relevant CI checks to pass before completion or merge. A baseline records the
+approved target, not proof that the app renders or matches it. Keep cases
+`planned` until implementation is complete, and never claim a passing visual
+comparison without verification.
 
 ## Traceability report
 
