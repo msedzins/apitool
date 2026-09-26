@@ -204,9 +204,10 @@ Keyboard help appears over the current view and lists the navigation, workspace,
 
 **Visual state:** required<br>
 **Viewport:** 100 columns × 30 rows<br>
-**Snapshot candidate:** true
+**Visual approval:** approved<br>
+**Snapshot baseline:** `testdata/ui-015/keyboard-help.txt`
 
-The candidate help-overlay snapshot path is `testdata/ui-015/keyboard-help.txt`. Semantic coverage also opens help from each listed mode; the snapshot represents the collection view.
+The approved help-overlay snapshot represents the collection view. Semantic coverage also opens help from each listed mode.
 
 <a id="ui-016"></a>
 ## UI-016 — Restore the prior view after closing help
@@ -258,9 +259,10 @@ Exactly one pane heading displays `▶` at a time; the marker follows the focus 
 
 **Visual state:** required<br>
 **Viewport:** 100 columns × 30 rows<br>
-**Snapshot candidate:** true
+**Visual approval:** approved<br>
+**Snapshot baselines:** `testdata/ui-001/payments-tree.txt`, `testdata/ui-015/request-focus.txt`, `testdata/ui-015/response-focus.txt`
 
-The collection-focus baseline is the existing `testdata/ui-001/payments-tree.txt`; update it to include the marker when this behavior is implemented. The new request- and response-focus baselines will be `testdata/ui-015/request-focus.txt` and `testdata/ui-015/response-focus.txt`. Snapshot tests read these files directly.
+These approved files show the collection, request, and response panes focused in turn. Snapshot tests read these files directly.
 
 <a id="ui-018"></a>
 ## UI-018 — Keep keyboard help usable in a small terminal

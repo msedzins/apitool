@@ -6,19 +6,19 @@
 │     GET list               │ Request: payments/list                                              │
 │     POST create            │                                                                     │
 │   ▸ admin                  │                                                                     │
-│ ▸ users                    ├─────────────────────────────────────────────────────────────────────┤
-│                            │ Response / Diagnostics / Request Log                                │
-│                            │ Select Send to execute this request.                                │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
+│ ▸ users               ┌──────────────────────────────────────────────────┐───────────────────────┤
+│                       │                Keyboard shortcuts                │                       │
+│                       ├──────────────────────────────────────────────────┤                       │
+│                       │ Navigation  ↑/↓ move • Enter open                │                       │
+│                       │ Focus       Tab switch panes                     │                       │
+│                       │ Tree        ←/→ expand/collapse                  │                       │
+│                       │ Workspace   Ctrl+P collections                   │                       │
+│                       │ Environment Ctrl+E select env                    │                       │
+│                       │ Search      / find request                       │                       │
+│                       │ Layout      Ctrl+←/→ resize split                │                       │
+│                       │ Help        ? or Esc close                       │                       │
+│                       │ Exit        Ctrl+C quit                          │                       │
+│                       └──────────────────────────────────────────────────┘                       │
 │                            │                                                                     │
 │                            │                                                                     │
 │                            │                                                                     │
