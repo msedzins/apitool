@@ -560,19 +560,21 @@ Run: `go test ./internal/tui -run 'Test(CollectionPickerOpensCollectionAndRestor
 
 Expected: FAIL because the TUI package does not exist.
 
-- [ ] **Step 3: Implement the shell and explorer**
+- [ ] **Step 3: Implement the shell, explorer, keyboard help, and focus feedback**
 
 Build a three-region view: persistent left collection/request tree, upper request area, lower response/diagnostic area. Implement collection picker, direct opening, environment picker, tree expansion, `Tab`, arrows, `Enter`, `Esc`, `/`, and `Ctrl+P`. Add mouse click routing for focus/selection and optional `j/k/h/l` aliases. Render status color when capable and explicit textual category (`success`, `redirect`, `client error`, `server error`, `warning`) when not. Store splitter and active collection/environment preferences through Task 5 state.
 
-- [ ] **Step 4: Add navigation tests**
+Add the UI-015 keyboard-help overlay and pane-focus contract from the design specification. `?` opens help before mode-specific key handling, including from pickers and search; it blocks all keys except `?`, `Esc`, and `Ctrl+C`. Closing help restores the unchanged underlying mode, selection, query, and focus. In the collection view, `Tab` cycles collection, request, response, and collection; exactly one pane heading carries the text marker `▶`, including when color is disabled. Render the centered approved 100×30 overlay and a compact one-column fallback for smaller terminals.
 
-Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled.
+- [ ] **Step 4: Add navigation and accessibility tests**
+
+Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add UI-015 coverage that `?` opens help from browse, collection picker, environment picker, and search; `?` and `Esc` close it without changing the underlying selection, query, environment, or focus; `Ctrl+C` quits while help is visible; and each Tab state has exactly one `▶` pane marker without color. Add exact 100×30 snapshot tests for collection focus, keyboard help, request focus, and response focus.
 
 - [ ] **Step 5: Run TUI tests and manual smoke test**
 
-Run: `go test ./internal/tui && go run ./cmd/apitool --help`
+Run: `go test ./internal/tui -count=1 && go test ./... && go run ./cmd/apitool --help`
 
-Expected: PASS; help lists `--env` and `--confirm-dangerous`.
+Expected: PASS; help lists `--env` and `--confirm-dangerous`, and the TUI suite validates all UI-015 approved snapshot candidates.
 
 - [ ] **Step 6: Commit TUI shell**
 

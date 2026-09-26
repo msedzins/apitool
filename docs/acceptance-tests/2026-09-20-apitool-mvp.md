@@ -31,6 +31,7 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [UI-002 — Keep invalid definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
 | [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | planned |
 | [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008 | planned |
+| [UI-015 — Discover keyboard shortcuts and pane focus](#ui-015) | UI | TUI | R-011 | T-008 | planned |
 | [CFG-001 — Save a valid request edit](#cfg-001) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-002 — Block invalid configuration](#cfg-002) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-003 — Block literal client secrets](#cfg-003) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
@@ -173,6 +174,40 @@ The request is reachable without a mouse, and text identifies the server-error s
 ### Notes
 
 Vim bindings are optional.
+
+<a id="ui-015"></a>
+## UI-015 — Discover keyboard shortcuts and pane focus
+
+**Category:** UI<br>
+**Observable surface:** TUI<br>
+**Requirements:** R-011<br>
+**Tasks:** T-008<br>
+**Status:** planned
+
+### Given
+
+A collection is open in a 100 columns × 30 rows TUI without color support.
+
+### When
+
+The user presses `?`, closes keyboard help with `Esc` or `?`, and presses `Tab` through each primary pane.
+
+### Then
+
+Keyboard help lists navigation, workspace, search, layout, help, and exit controls. Closing it preserves the prior mode, selection, query, environment, and pane focus. Each Tab state shows exactly one textual `▶` focus marker, cycling collection, request, response, and collection; no result relies on color.
+
+### Approved screen workflow
+
+**Visual approval:** approved<br>
+**Viewport:** 100 columns × 30 rows<br>
+**Interaction:** keyboard; `?` opens help, `Esc` or `?` closes it, and `Tab` changes focus.<br>
+**Snapshot candidate:** true
+
+The canonical future snapshots are the four UI-015 states defined in the design specification: collection focus, keyboard help, request focus, and response focus. They are not added until Task 8 implementation begins.
+
+### Notes
+
+`Ctrl+C` exits whether or not help is open. Small terminals use a compact one-column help layout.
 
 ## Configuration lifecycle
 
@@ -894,6 +929,7 @@ It uses no secrets, artifacts, releases, or version matrix.
 | UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
 | UI-003 | UI | TUI | R-004 | T-002, T-008 | planned |
 | UI-004 | UI | TUI | R-011 | T-008 | planned |
+| UI-015 | UI | TUI | R-011 | T-008 | planned |
 | CFG-001 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-002 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-003 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
