@@ -50,6 +50,18 @@ func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
 	}
 }
 
+func TestUI001PreviewSkipsRequestWithInvalidGroupDiagnostics(t *testing.T) {
+	service := ui001InvalidGroupPreviewService(t)
+	model := tui.New(service, tui.Options{Color: false})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	got := model.View()
+	if !strings.Contains(got, "GET | {{base_url}}/valid") || !strings.Contains(got, "Request: valid") {
+		t.Fatalf("preview = %q, want the later valid request", got)
+	}
+}
+
 func ui001WorkspaceService(t *testing.T) *app.Service {
 	t.Helper()
 	root := t.TempDir()
@@ -72,6 +84,41 @@ func ui001WorkspaceService(t *testing.T) *app.Service {
 	write("payments/.api/requests/payments/create.yaml", "name: Create payment\nmethod: POST\nrequest:\n  url: \"{{base_url}}/payments\"\n")
 	write("payments/.api/requests/admin/_group.yaml", "name: Admin\n")
 	write("users/.api/collection.yaml", "name: Users API\n")
+
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SelectEnvironment(context.Background(), "payments", "test"); err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+func ui001InvalidGroupPreviewService(t *testing.T) *app.Service {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, data string) {
+		t.Helper()
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("payments/.api/collection.yaml", "name: Payments API\n")
+	write("payments/.api/environments/test.yaml", "name: test\nvariables:\n  base_url: https://api.example.test\n")
+	write("payments/.api/requests/payments/_group.yaml", "auth: invalid\n")
+	write("payments/.api/requests/payments/affected.yaml", "name: Affected\nmethod: GET\nrequest:\n  url: \"{{base_url}}/affected\"\n")
+	write("payments/.api/requests/valid.yaml", "name: Valid\nmethod: GET\nrequest:\n  url: \"{{base_url}}/valid\"\n")
 
 	service, err := app.New(app.Dependencies{})
 	if err != nil {

@@ -202,7 +202,14 @@ func (m Model) groupRequests(groupID string) []collection.RequestNode {
 func (m Model) previewRequest() (collection.RequestNode, bool) {
 	var requests []collection.RequestNode
 	for _, id := range m.view.Tree.RequestIDs {
-		requests = append(requests, m.view.Tree.Requests[id])
+		request := m.view.Tree.Requests[id]
+		if len(request.Diagnostics) != 0 {
+			continue
+		}
+		if _, invalid := m.view.Tree.Invalid[id]; invalid {
+			continue
+		}
+		requests = append(requests, request)
 	}
 	sort.Slice(requests, func(i, j int) bool {
 		if requests[i].Request.Method == requests[j].Request.Method {
