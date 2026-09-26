@@ -3,8 +3,10 @@ package tui_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -47,6 +49,27 @@ func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
 	}
 	if got != string(want) {
 		t.Fatalf("UI-001 selected collection mismatch:\n%s", lineDiff(string(want), got))
+	}
+}
+
+func TestUI001ExampleWorkspaceDiscoversApprovedCollections(t *testing.T) {
+	root := ui001ExampleWorkspaceRoot(t)
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	collections := make([]string, 0, len(workspace.Collections))
+	for collectionPath := range workspace.Collections {
+		collections = append(collections, collectionPath)
+	}
+	sort.Strings(collections)
+	if got, want := strings.Join(collections, ","), "payments,users"; got != want {
+		t.Fatalf("discovered collections = %q, want %q", got, want)
 	}
 }
 
@@ -117,27 +140,7 @@ func TestUI001PreviewSkipsRequestWithInvalidGroupDiagnostics(t *testing.T) {
 
 func ui001WorkspaceService(t *testing.T) *app.Service {
 	t.Helper()
-	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	write := func(path, data string) {
-		t.Helper()
-		path = filepath.Join(root, path)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("payments/.api/collection.yaml", "name: Payments API\n")
-	write("payments/.api/environments/test.yaml", "name: test\nvariables:\n  base_url: https://api.example.test\n")
-	write("payments/.api/requests/payments/list.yaml", "name: List payments\nmethod: GET\nrequest:\n  url: \"{{base_url}}/payments\"\n")
-	write("payments/.api/requests/payments/create.yaml", "name: Create payment\nmethod: POST\nrequest:\n  url: \"{{base_url}}/payments\"\n")
-	write("payments/.api/requests/admin/_group.yaml", "name: Admin\n")
-	write("users/.api/collection.yaml", "name: Users API\n")
-
+	root := ui001ExampleWorkspaceRoot(t)
 	service, err := app.New(app.Dependencies{})
 	if err != nil {
 		t.Fatal(err)
@@ -149,6 +152,39 @@ func ui001WorkspaceService(t *testing.T) *app.Service {
 		t.Fatal(err)
 	}
 	return service
+}
+
+func ui001ExampleWorkspaceRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	source := filepath.Join("..", "..", "examples", "workspace")
+	if err := filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if relativePath == "." {
+			return nil
+		}
+		destination := filepath.Join(root, relativePath)
+		if entry.IsDir() {
+			return os.MkdirAll(destination, 0o755)
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destination, contents, 0o644)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func ui001InvalidGroupPreviewService(t *testing.T) *app.Service {

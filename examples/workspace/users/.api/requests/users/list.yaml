@@ -1,0 +1,4 @@
+name: List users
+method: GET
+request:
+  url: "{{base_url}}/users"
