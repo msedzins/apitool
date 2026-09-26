@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"apitool/internal/collection"
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
+	"sort"
 	"strings"
 	"time"
 )
@@ -49,6 +51,9 @@ func (m Model) View() string {
 	if m.mode == environmentPickerMode {
 		return m.environmentPickerView()
 	}
+	if m.hasCollectionRootGroup() {
+		return m.collectionView()
+	}
 	left := m.treeLines()
 	rightTop := []string{"Request", fmt.Sprintf("Collection: %s", m.collection), fmt.Sprintf("Environment: %s", m.view.Environment), m.selectedRequest()}
 	if m.mode == searchMode {
@@ -56,6 +61,166 @@ func (m Model) View() string {
 	}
 	rightBottom := []string{"Response / diagnostics", m.message, "Focus: " + m.focusName(), "Tab panes • Ctrl+P collections • Ctrl+E environments • / search"}
 	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
+}
+
+func (m Model) hasCollectionRootGroup() bool {
+	for _, group := range m.view.Tree.Groups {
+		if group.ID == m.collection {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) collectionView() string {
+	width, height := m.width, m.height
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+	leftWidth := 28
+	if leftWidth > width-12 {
+		leftWidth = width / 3
+	}
+	if leftWidth < 1 {
+		leftWidth = 1
+	}
+	rightWidth := width - leftWidth - 3
+	if rightWidth < 1 {
+		rightWidth = 1
+	}
+
+	left, right := make([]string, height), make([]string, height)
+	if height > 1 {
+		left[1] = " Collections / tree"
+		if request, ok := m.previewRequest(); ok {
+			right[1] = fmt.Sprintf(" %s | %-48s[ Send ]", request.Request.Method, request.Request.Request.URL)
+		}
+	}
+	if height > 3 {
+		right[3] = " Params | Headers | Auth | Body | Settings"
+	}
+	for row, line := range m.collectionTreeLines() {
+		row += 3
+		if row >= height-4 {
+			break
+		}
+		left[row] = " " + line
+	}
+	if height > 5 {
+		if request, ok := m.previewRequest(); ok {
+			right[5] = " Request: " + request.ID
+		}
+	}
+	responseDivider := 8
+	if responseDivider < height {
+		right[responseDivider+1] = " Response / Diagnostics / Request Log"
+	}
+	if responseDivider+2 < height {
+		right[responseDivider+2] = " Select Send to execute this request."
+	}
+	statusDivider := height - 4
+	if statusDivider+1 < height {
+		left[statusDivider+1] = " Collection: " + m.collection
+		right[statusDivider+1] = " Environment: " + m.view.Environment
+	}
+	if statusDivider+2 < height {
+		left[statusDivider+2] = " Ctrl+P collections"
+	}
+
+	lines := make([]string, 0, height)
+	for row := 0; row < height; row++ {
+		switch row {
+		case 0:
+			lines = append(lines, "┌"+strings.Repeat("─", leftWidth)+"┬"+strings.Repeat("─", rightWidth)+"┐")
+		case height - 1:
+			lines = append(lines, "└"+strings.Repeat("─", leftWidth)+"┴"+strings.Repeat("─", rightWidth)+"┘")
+		case statusDivider:
+			lines = append(lines, "├"+strings.Repeat("─", leftWidth)+"┼"+strings.Repeat("─", rightWidth)+"┤")
+		case 2, responseDivider:
+			lines = append(lines, "│"+pad(left[row], leftWidth)+"├"+strings.Repeat("─", rightWidth)+"┤")
+		default:
+			lines = append(lines, "│"+pad(left[row], leftWidth)+"│"+pad(right[row], rightWidth)+"│")
+		}
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func (m Model) collectionTreeLines() []string {
+	lines := []string{"▾ " + m.collection}
+	groups := append([]collection.GroupNode(nil), m.view.Tree.Groups...)
+	sort.SliceStable(groups, func(i, j int) bool {
+		if groups[i].ID == m.collection {
+			return true
+		}
+		if groups[j].ID == m.collection {
+			return false
+		}
+		return groups[i].ID < groups[j].ID
+	})
+	for _, group := range groups {
+		indent := strings.Repeat("  ", strings.Count(group.ID, "/")+1)
+		marker := "▸"
+		if group.ID == m.collection {
+			marker = "▾"
+		}
+		lines = append(lines, indent+marker+" "+lastSegment(group.ID))
+		if group.ID != m.collection {
+			continue
+		}
+		for _, request := range m.groupRequests(group.ID) {
+			lines = append(lines, indent+"  "+request.Request.Method+" "+lastSegment(request.ID))
+		}
+	}
+	for _, collection := range m.collections {
+		if collection != m.collection {
+			lines = append(lines, "▸ "+collection)
+		}
+	}
+	return lines
+}
+
+func (m Model) groupRequests(groupID string) []collection.RequestNode {
+	var requests []collection.RequestNode
+	for _, id := range m.view.Tree.RequestIDs {
+		request := m.view.Tree.Requests[id]
+		if len(request.Groups) != 0 && request.Groups[len(request.Groups)-1].ID == groupID {
+			requests = append(requests, request)
+		}
+	}
+	sort.Slice(requests, func(i, j int) bool {
+		if requests[i].Request.Method == requests[j].Request.Method {
+			return requests[i].ID < requests[j].ID
+		}
+		return requests[i].Request.Method < requests[j].Request.Method
+	})
+	return requests
+}
+
+func (m Model) previewRequest() (collection.RequestNode, bool) {
+	var requests []collection.RequestNode
+	for _, id := range m.view.Tree.RequestIDs {
+		requests = append(requests, m.view.Tree.Requests[id])
+	}
+	sort.Slice(requests, func(i, j int) bool {
+		if requests[i].Request.Method == requests[j].Request.Method {
+			return requests[i].ID < requests[j].ID
+		}
+		return requests[i].Request.Method < requests[j].Request.Method
+	})
+	if len(requests) == 0 {
+		return collection.RequestNode{}, false
+	}
+	return requests[0], true
+}
+
+func lastSegment(value string) string {
+	if index := strings.LastIndex(value, "/"); index >= 0 {
+		return value[index+1:]
+	}
+	return value
 }
 func (m Model) explorerWidth() int {
 	if m.explorer > 0 {

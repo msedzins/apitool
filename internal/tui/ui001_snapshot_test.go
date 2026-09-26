@@ -28,6 +28,28 @@ func TestUI001CollectionPickerMatchesApprovedScreen(t *testing.T) {
 	}
 }
 
+func TestUI001SelectedCollectionMatchesApprovedScreen(t *testing.T) {
+	service := ui001WorkspaceService(t)
+	model := tui.New(service, tui.Options{Color: false})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	got := model.View()
+	if !strings.Contains(got, "Collection: payments") {
+		t.Fatalf("selected collection screen = %q, want payments active", got)
+	}
+	if !strings.Contains(got, "▸ users") {
+		t.Fatalf("selected collection screen = %q, want users represented as collapsed", got)
+	}
+	want, err := os.ReadFile(filepath.Join("..", "..", "testdata", "ui-001", "payments-tree.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("UI-001 selected collection mismatch:\n%s", lineDiff(string(want), got))
+	}
+}
+
 func ui001WorkspaceService(t *testing.T) *app.Service {
 	t.Helper()
 	root := t.TempDir()
@@ -45,6 +67,10 @@ func ui001WorkspaceService(t *testing.T) *app.Service {
 		}
 	}
 	write("payments/.api/collection.yaml", "name: Payments API\n")
+	write("payments/.api/environments/test.yaml", "name: test\nvariables:\n  base_url: https://api.example.test\n")
+	write("payments/.api/requests/payments/list.yaml", "name: List payments\nmethod: GET\nrequest:\n  url: \"{{base_url}}/payments\"\n")
+	write("payments/.api/requests/payments/create.yaml", "name: Create payment\nmethod: POST\nrequest:\n  url: \"{{base_url}}/payments\"\n")
+	write("payments/.api/requests/admin/_group.yaml", "name: Admin\n")
 	write("users/.api/collection.yaml", "name: Users API\n")
 
 	service, err := app.New(app.Dependencies{})
@@ -52,6 +78,9 @@ func ui001WorkspaceService(t *testing.T) *app.Service {
 		t.Fatal(err)
 	}
 	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SelectEnvironment(context.Background(), "payments", "test"); err != nil {
 		t.Fatal(err)
 	}
 	return service
