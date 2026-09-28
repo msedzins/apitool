@@ -51,6 +51,9 @@ requirement -> implementation task -> acceptance test case
 The test cases are a behavioral contract. They are not unit-test outlines,
 implementation instructions, or a test runner specification.
 
+Keep document changes as narrow as possible. After the first complete draft,
+cut its changed-line count by at least half while preserving required content.
+
 ## Required two-step flow
 
 ### Step 1: Design or update the scenarios
