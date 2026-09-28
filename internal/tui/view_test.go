@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"apitool/internal/app"
+	"apitool/internal/runtime"
 	"apitool/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -88,7 +89,18 @@ func TestCtrlArrowsResizeExplorerSplitter(t *testing.T) {
 func TestMousePressSelectsClickedTreeRow(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 24})
-	m, _ = m.Update(tea.MouseMsg{X: 2, Y: 6, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	lines := strings.Split(m.View(), "\n")
+	requestRow := -1
+	for index, line := range lines {
+		if strings.Contains(line, "GET check") {
+			requestRow = index
+			break
+		}
+	}
+	if requestRow < 0 {
+		t.Fatalf("View() = %q, want check request row", m.View())
+	}
+	m, _ = m.Update(tea.MouseMsg{X: 2, Y: requestRow, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
 	if got := m.View(); !strings.Contains(got, "Request: check") {
 		t.Fatalf("mouse selection = %q, want clicked check request", got)
 	}
@@ -192,8 +204,42 @@ func TestExplorerViewportFollowsKeyboardSelectionAndMouseUsesOffset(t *testing.T
 		t.Fatalf("viewport = %q, want selected z0 visible", got)
 	}
 	m, _ = m.Update(tea.MouseMsg{X: 2, Y: 2, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
-	if got := m.View(); !strings.Contains(got, "Request: billing/nested") {
-		t.Fatalf("offset mouse = %q, want visible top request selected", got)
+	if got := m.View(); !strings.Contains(got, "Request: z0") {
+		t.Fatalf("offset mouse = %q, want the selected top visible request", got)
+	}
+}
+
+func TestFullLayoutMouseUsesRenderedTreeAndPaneCoordinates(t *testing.T) {
+	m := ui001SelectedCollectionModel(t)
+	lines := strings.Split(m.View(), "\n")
+	requestRow := -1
+	for index, line := range lines {
+		if strings.Contains(line, "GET list") {
+			requestRow = index
+			break
+		}
+	}
+	if requestRow < 0 {
+		t.Fatalf("View() = %q, want list request row", m.View())
+	}
+	m, _ = m.Update(tea.MouseMsg{X: 2, Y: requestRow, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if got := m.View(); !strings.Contains(got, "Request: payments/list") {
+		t.Fatalf("tree click = %q, want clicked request selected", got)
+	}
+	lines = strings.Split(m.View(), "\n")
+	responseHeading := -1
+	for index, line := range lines {
+		if strings.Contains(line, "Response / Diagnostics / Request Log") {
+			responseHeading = index
+			break
+		}
+	}
+	if responseHeading < 0 {
+		t.Fatalf("View() = %q, want response heading", m.View())
+	}
+	m, _ = m.Update(tea.MouseMsg{X: 80, Y: responseHeading, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if got := m.View(); !strings.Contains(got, "▶ Response / Diagnostics / Request Log") {
+		t.Fatalf("response click = %q, want response pane focused", got)
 	}
 }
 
@@ -205,11 +251,14 @@ func TestPendingStartingEnvironmentAppliesAfterColdPickerSelection(t *testing.T)
 	}
 }
 
-func TestInvalidPendingStartingEnvironmentSurfacesErrorAfterColdPickerSelection(t *testing.T) {
+func TestInvalidPendingStartingEnvironmentBlocksRequestViewAndFallback(t *testing.T) {
 	m := tui.New(coldPickerService(t), tui.Options{StartingEnvironment: "missing"})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.View(); !strings.Contains(got, `collection "payments" has no environment "missing`) {
 		t.Fatalf("cold picker = %q, want invalid environment error", got)
+	}
+	if got := m.View(); strings.Contains(got, "Request: payments/ping") || strings.Contains(got, "Environment: test") {
+		t.Fatalf("cold picker = %q, want no request view or fallback environment", got)
 	}
 }
 
@@ -231,6 +280,14 @@ func coldPickerService(t *testing.T) *app.Service {
 	write("payments/.api/collection.yaml", "name: Payments\n")
 	write("payments/.api/environments/test.yaml", "name: test\n")
 	write("payments/.api/environments/prod.yaml", "name: prod\n")
+	write("payments/.api/requests/ping.yaml", "name: Ping\nmethod: GET\nrequest:\n  url: https://example.test/ping\n")
+	store, err := runtime.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveState(runtime.State{LastActiveEnvironment: map[string]string{"payments": "test"}}); err != nil {
+		t.Fatal(err)
+	}
 	service, err := app.New(app.Dependencies{})
 	if err != nil {
 		t.Fatal(err)

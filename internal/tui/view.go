@@ -99,8 +99,14 @@ func (m Model) collectionView() string {
 	if height > 3 {
 		right[3] = " Params | Headers | Auth | Body | Settings"
 	}
-	for row, line := range m.collectionTreeLines() {
-		row += 3
+	for index, line := range m.collectionTreeLines() {
+		row := index + 3
+		if index > 0 {
+			if index-1 < m.treeOffset {
+				continue
+			}
+			row -= m.treeOffset
+		}
 		if row >= height-4 {
 			break
 		}
@@ -299,6 +305,23 @@ func (m Model) collectionTreeLines() []string {
 		}
 		lines = append(lines, prefix+request.Request.Method+" "+id)
 	}
+	invalidIDs := make([]string, 0, len(m.view.Tree.Invalid))
+	for id := range m.view.Tree.Invalid {
+		invalidIDs = append(invalidIDs, id)
+	}
+	sort.Strings(invalidIDs)
+	for _, id := range invalidIDs {
+		if !m.ancestorsExpanded(id) {
+			continue
+		}
+		prefix := "  "
+		rows := m.visibleRows()
+		if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == invalidRow && rows[m.treeIndex].id == id {
+			prefix = "> "
+		}
+		indent := strings.Repeat("  ", strings.Count(id, "/")+1)
+		lines = append(lines, indent+prefix+"! "+lastSegment(id)+" (warning)")
+	}
 	for _, collection := range m.collections {
 		if collection != m.collection {
 			lines = append(lines, "▸ "+collection)
@@ -477,7 +500,11 @@ func (m Model) collectionPickerView() string {
 	}
 	setRow(1, " Collections / tree", " apitool")
 	setRow(3, "", "  Collection picker")
-	setRow(4, "", "  Select a collection to open")
+	if m.message != "" {
+		setRow(4, "", "  "+m.message)
+	} else {
+		setRow(4, "", "  Select a collection to open")
+	}
 	for i, collection := range m.collections {
 		if 3+i >= divider {
 			break
@@ -538,12 +565,36 @@ func (m Model) collectionPickerLines(available int) []string {
 		if i == m.collectionIndex {
 			marker = " > "
 		}
-		lines = append(lines, line(marker+path))
+		label := marker + path
+		if m.collectionHasMetadataError(path) {
+			label += " (warning)"
+		}
+		lines = append(lines, line(label))
 		lines = append(lines, line("  "+m.collectionDisplayName(path)))
 		lines = append(lines, line("  "+path+"/.api"))
 	}
 	lines = append(lines, line(""), line(" ↑/↓ move   Enter open   Esc close"), "└"+strings.Repeat("─", contentWidth)+"┘")
 	return lines
+}
+
+func (m Model) collectionHasMetadataError(path string) bool {
+	if m.service == nil {
+		return false
+	}
+	workspace, err := m.service.Workspace()
+	if err != nil {
+		return false
+	}
+	view, ok := workspace.Collections[path]
+	if !ok {
+		return false
+	}
+	for _, diagnostic := range view.Diagnostics {
+		if diagnostic.Code == "collection_load" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) collectionDisplayName(path string) string {
@@ -558,6 +609,9 @@ func (m Model) collectionDisplayName(path string) string {
 }
 func (m Model) environmentPickerView() string {
 	lines := []string{"Environments"}
+	if m.message != "" {
+		lines = append(lines, m.message)
+	}
 	for i, n := range m.environmentNames() {
 		p := "  "
 		if i == m.environmentIndex {

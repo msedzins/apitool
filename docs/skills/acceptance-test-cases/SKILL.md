@@ -80,7 +80,8 @@ screen-baseline locations.
 
 The reviewer may inspect code, tests, test output, and snapshots only to
 verify delivery and status; it must not use them to redefine expected behavior.
-For every mapped test case, the reviewer must record:
+For every mapped test case, the reviewer returns a transient status assessment
+to the coordinating agent:
 
 | Test case | Verified status | Evidence | Missing or blocked work |
 |---|---|---|---|
@@ -88,9 +89,12 @@ For every mapped test case, the reviewer must record:
 
 The reviewer verifies that the delivered behavior proves the scenario's
 `Then`, the mapped task actually covers it, required fixtures or baselines
-exist and are linked, and verification results are current. The scenario
-author updates statuses only from this report. If review evidence is absent,
-incomplete, or failing, keep the case `planned` and report the gap.
+exist and are linked, and verification results are current. The coordinating
+agent uses this assessment internally to update statuses and explain gaps. Do
+not save the assessment, its table, or its case-specific evidence in the
+repository, acceptance-test plan, PR description, or a separate review report.
+If the reviewer cannot verify a case or finds it incomplete or failing, keep
+the case `planned` and report the gap without retaining the reviewer evidence.
 
 ## Case selection
 
@@ -207,8 +211,9 @@ Also list, separately:
 - tasks without mapped acceptance coverage;
 - ambiguities that block a trustworthy case.
 
-For Step 2, include the independent review table and retain its exact evidence
-with the PR or review report.
+Use Step 2 results only for the coordinating agent's status decisions. Keep
+review evidence transient; the acceptance-test document stores case status and
+traceability, not reviewer notes or proof artifacts.
 
 ## Keep acceptance cases and implementation plans distinct
 
@@ -226,9 +231,6 @@ design behavior in the implementation plan when context is needed.
 For example, write “test opening help from each TUI mode and restoring the
 previous view” in the implementation plan, while the acceptance document maps
 those behaviors to their `UI-xxx` cases.
-
-The independent Step 2 review report may use acceptance-case IDs because it
-verifies acceptance status; it is not an implementation plan.
 
 ## Reusable plan-boundary guard
 

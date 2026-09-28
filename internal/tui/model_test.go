@@ -41,18 +41,78 @@ func TestCollectionSwitchChangesTreeAndEnvironment(t *testing.T) {
 	}
 }
 
+func ui002FixtureService(t *testing.T) *app.Service {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeWorkspaceFile(t, root, "users/.api/collection.yaml", "name: Users API\n")
+	writeWorkspaceFile(t, root, "users/.api/environments/test.yaml", "name: test\nvariables:\n  base_url: https://users.example.test\n")
+	writeWorkspaceFile(t, root, "users/.api/requests/users/list.yaml", "name: List users\nmethod: GET\nrequest:\n  url: \"{{base_url}}/users\"\n")
+	writeWorkspaceFile(t, root, "users/.api/requests/broken.yaml", "name: Broken request\nmethod: GET\n")
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+func writeWorkspaceFile(t *testing.T, root, name, contents string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInvalidRequestHasWarningWhileValidSiblingOpens(t *testing.T) {
-	m := tui.New(fixtureService(t), tui.Options{})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !containsAll(got, "warning", "check") {
+	m := tui.New(ui002FixtureService(t), tui.Options{StartingCollection: "users"})
+	if got := m.View(); !containsAll(got, "! broken (warning)", "GET list") {
 		t.Fatalf("tree View() = %q, want warning and valid sibling", got)
 	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("list")})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !containsAll(got, "Request: billing/nested") {
-		t.Fatalf("opened View() = %q, want selected valid request", got)
+	if got := m.View(); !containsAll(got, "Request: users/list", "warning") {
+		t.Fatalf("opened View() = %q, want valid sibling selected while invalid request remains visible", got)
+	}
+}
+
+func TestNestedInvalidWarningsKeepTheirGroupContext(t *testing.T) {
+	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	var indents []int
+	for _, line := range strings.Split(m.View(), "\n") {
+		if strings.Contains(line, "! bad (warning)") {
+			indents = append(indents, strings.Index(line, "! bad (warning)"))
+		}
+	}
+	if len(indents) != 2 || indents[0] == indents[1] {
+		t.Fatalf("warning rows = %q, want two distinct nested positions", m.View())
+	}
+}
+
+func TestInvalidRequestSelectionShowsPreciseDiagnostic(t *testing.T) {
+	m := tui.New(ui002FixtureService(t), tui.Options{StartingCollection: "users"})
+	for range 30 {
+		if strings.Contains(m.View(), "> ! broken (warning)") {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if got := m.View(); !strings.Contains(got, "> ! broken (warning)") {
+		t.Fatalf("tree View() = %q, want broken request selected", got)
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := m.View(); !containsAll(got, ".api/requests/broken.yaml", "request.url", "required") {
+		t.Fatalf("diagnostic View() = %q, want precise invalid request details", got)
 	}
 }
 
@@ -86,7 +146,7 @@ func TestVimNavigationIsOptIn(t *testing.T) {
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyDown})
 	withoutVim, _ = withoutVim.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	if got := withoutVim.View(); !containsAll(got, "Request: billing/nested") {
+	if got := withoutVim.View(); !containsAll(got, "Request: billing/deep/item") {
 		t.Fatalf("default View() = %q, want selection unchanged", got)
 	}
 	withVim := tui.New(fixtureService(t), tui.Options{VimMode: true})
