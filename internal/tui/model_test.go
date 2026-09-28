@@ -42,8 +42,8 @@ func TestCollectionSwitchChangesTreeAndEnvironment(t *testing.T) {
 }
 
 func TestMalformedCollectionMetadataRemainsVisibleAndDiagnosed(t *testing.T) {
-	m := tui.New(invalidCollectionMetadataService(t), tui.Options{})
-	if got := m.View(); !containsAll(got, "bad", "warning", "good") {
+	m := tui.New(ui020FixtureService(t), tui.Options{})
+	if got := m.View(); !strings.Contains(got, "bad (warning)") || !strings.Contains(got, "good") {
 		t.Fatalf("picker View() = %q, want bad collection warning and valid sibling", got)
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -53,26 +53,36 @@ func TestMalformedCollectionMetadataRemainsVisibleAndDiagnosed(t *testing.T) {
 	if got := m.View(); strings.Contains(got, "Request: bad/list") {
 		t.Fatalf("picker View() = %q, invalid collection opened a request", got)
 	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := m.View(); !containsAll(got, "Collection: good", "GET ping") {
+		t.Fatalf("picker View() = %q, valid collection should remain selectable", got)
+	}
 }
 
-func invalidCollectionMetadataService(t *testing.T) *app.Service {
+func ui002FixtureService(t *testing.T) *app.Service {
+	t.Helper()
+	root := ui001ExampleWorkspaceRoot(t)
+	service, err := app.New(app.Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+func ui020FixtureService(t *testing.T) *app.Service {
 	t.Helper()
 	root := t.TempDir()
-	write := func(name, data string) {
-		path := filepath.Join(root, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	source := filepath.Join("..", "..", "testdata", "ui-020", "workspace")
+	if err := os.CopyFS(root, os.DirFS(source)); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	write("bad/.api/collection.yaml", "name: [broken\n")
-	write("bad/.api/requests/list.yaml", "name: List\nmethod: GET\nrequest:\n  url: https://example.test/list\n")
-	write("good/.api/collection.yaml", "name: Good\n")
 	service, err := app.New(app.Dependencies{})
 	if err != nil {
 		t.Fatal(err)
@@ -84,14 +94,14 @@ func invalidCollectionMetadataService(t *testing.T) *app.Service {
 }
 
 func TestInvalidRequestHasWarningWhileValidSiblingOpens(t *testing.T) {
-	m := tui.New(fixtureService(t), tui.Options{})
-	if got := m.View(); !containsAll(got, "warning", "check") {
+	m := tui.New(ui002FixtureService(t), tui.Options{StartingCollection: "users"})
+	if got := m.View(); !containsAll(got, "! broken (warning)", "GET list") {
 		t.Fatalf("tree View() = %q, want warning and valid sibling", got)
 	}
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("check")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("list")})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !containsAll(got, "Request: check", "warning") {
+	if got := m.View(); !containsAll(got, "Request: users/list", "warning") {
 		t.Fatalf("opened View() = %q, want valid sibling selected while invalid request remains visible", got)
 	}
 }
@@ -111,7 +121,7 @@ func TestNestedInvalidWarningsKeepTheirGroupContext(t *testing.T) {
 }
 
 func TestInvalidRequestSelectionShowsPreciseDiagnostic(t *testing.T) {
-	m := tui.New(fixtureService(t), tui.Options{})
+	m := tui.New(ui002FixtureService(t), tui.Options{StartingCollection: "users"})
 	for range 30 {
 		if strings.Contains(m.View(), "> ! broken (warning)") {
 			break

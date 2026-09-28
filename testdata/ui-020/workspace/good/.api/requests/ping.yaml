@@ -1,0 +1,4 @@
+name: Ping
+method: GET
+request:
+  url: https://example.test/ping

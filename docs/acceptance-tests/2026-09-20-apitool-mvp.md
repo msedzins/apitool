@@ -28,7 +28,8 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | Test case | Category | Observable surface | Requirements | Tasks | Status |
 |---|---|---|---|---|---|
 | [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | implemented |
-| [UI-002 — Keep invalid definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
+| [UI-002 — Keep invalid request definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
+| [UI-020 — Diagnose malformed collection metadata](#ui-020) | UI | TUI | R-002 | T-002, T-008 | implemented |
 | [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | implemented |
 | [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008, T-010 | planned |
 | [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | implemented |
@@ -105,7 +106,7 @@ and [Screen 2 — selected collection request tree](../../testdata/ui-001/paymen
 No workspace manifest or Git remote is required.
 
 <a id="ui-002"></a>
-## UI-002 — Keep invalid definitions visible
+## UI-002 — Keep invalid request definitions visible
 
 **Category:** UI<br>
 **Observable surface:** TUI<br>
@@ -115,7 +116,7 @@ No workspace manifest or Git remote is required.
 
 ### Given
 
-A collection contains one malformed definition and one valid sibling request.
+A collection contains one malformed request definition and one valid sibling request.
 
 ### When
 
@@ -123,16 +124,32 @@ The user opens the collection tree and selects the malformed entry.
 
 ### Then
 
-The entry remains visible with a warning and precise file/field diagnostic, while the valid sibling remains selectable.
+The malformed request remains visible with a warning. Selecting it presents its precise file/field diagnostic, and the valid sibling can still be opened.
 
-### Notes
+**Acceptance fixture:** [examples/workspace](../../examples/workspace/)
 
-Malformed collection metadata is diagnosed rather than silently hidden.
+<a id="ui-020"></a>
+## UI-020 — Diagnose malformed collection metadata
 
-The picker marks malformed collection metadata with a warning and shows its
-file diagnostic instead of opening that collection's request view. Invalid
-request definitions remain selectable for a precise diagnostic, while valid
-sibling requests remain available.
+**Category:** UI<br>
+**Observable surface:** TUI<br>
+**Requirements:** R-002<br>
+**Tasks:** T-002, T-008<br>
+**Status:** implemented
+
+### Given
+
+A workspace contains a discovered collection with malformed `.api/collection.yaml` metadata and a separate valid collection.
+
+### When
+
+The user opens the collection picker and selects the malformed collection.
+
+### Then
+
+The malformed collection remains listed with a warning and its metadata file diagnostic. Its request view does not open, and the valid collection remains selectable.
+
+**Acceptance fixture:** [testdata/ui-020/workspace](../../testdata/ui-020/workspace/)
 
 <a id="ui-003"></a>
 ## UI-003 — Render nested request groups
@@ -1037,6 +1054,7 @@ It uses no secrets, artifacts, releases, or version matrix.
 |---|---|---|---|---|---|
 | UI-001 | UI | TUI | R-001 | T-002, T-008 | implemented |
 | UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
+| UI-020 | UI | TUI | R-002 | T-002, T-008 | implemented |
 | UI-003 | UI | TUI | R-004 | T-002, T-008 | implemented |
 | UI-004 | UI | TUI | R-011 | T-008, T-010 | planned |
 | UI-015 | UI | TUI | R-011 | T-008 | implemented |

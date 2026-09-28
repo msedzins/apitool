@@ -42,7 +42,7 @@ func TestUI015HelpRestoresEveryTUIState(t *testing.T) {
 		model tea.Model
 	}{
 		{"collection view", ui001SelectedCollectionModel(t)},
-		{"collection picker", tui.New(invalidCollectionMetadataService(t), tui.Options{})},
+		{"collection picker", tui.New(ui002FixtureService(t), tui.Options{})},
 		{"environment picker", environmentPickerModel(t)},
 		{"search", searchModel(t)},
 	}
