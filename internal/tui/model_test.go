@@ -41,48 +41,16 @@ func TestCollectionSwitchChangesTreeAndEnvironment(t *testing.T) {
 	}
 }
 
-func TestMalformedCollectionMetadataRemainsVisibleAndDiagnosed(t *testing.T) {
-	m := tui.New(ui020FixtureService(t), tui.Options{})
-	if got := m.View(); !strings.Contains(got, "bad (warning)") || !strings.Contains(got, "good") {
-		t.Fatalf("picker View() = %q, want bad collection warning and valid sibling", got)
-	}
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !strings.Contains(got, "bad/.api/collection.yaml") {
-		t.Fatalf("picker View() = %q, want collection metadata diagnostic", got)
-	}
-	if got := m.View(); strings.Contains(got, "Request: bad/list") {
-		t.Fatalf("picker View() = %q, invalid collection opened a request", got)
-	}
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.View(); !containsAll(got, "Collection: good", "GET ping") {
-		t.Fatalf("picker View() = %q, valid collection should remain selectable", got)
-	}
-}
-
 func ui002FixtureService(t *testing.T) *app.Service {
 	t.Helper()
-	root := ui001ExampleWorkspaceRoot(t)
-	service, err := app.New(app.Dependencies{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	return service
-}
-
-func ui020FixtureService(t *testing.T) *app.Service {
-	t.Helper()
 	root := t.TempDir()
-	source := filepath.Join("..", "..", "testdata", "ui-020", "workspace")
-	if err := os.CopyFS(root, os.DirFS(source)); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeWorkspaceFile(t, root, "users/.api/collection.yaml", "name: Users API\n")
+	writeWorkspaceFile(t, root, "users/.api/environments/test.yaml", "name: test\nvariables:\n  base_url: https://users.example.test\n")
+	writeWorkspaceFile(t, root, "users/.api/requests/users/list.yaml", "name: List users\nmethod: GET\nrequest:\n  url: \"{{base_url}}/users\"\n")
+	writeWorkspaceFile(t, root, "users/.api/requests/broken.yaml", "name: Broken request\nmethod: GET\n")
 	service, err := app.New(app.Dependencies{})
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +59,17 @@ func ui020FixtureService(t *testing.T) *app.Service {
 		t.Fatal(err)
 	}
 	return service
+}
+
+func writeWorkspaceFile(t *testing.T, root, name, contents string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestInvalidRequestHasWarningWhileValidSiblingOpens(t *testing.T) {

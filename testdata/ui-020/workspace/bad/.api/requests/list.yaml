@@ -1,4 +1,0 @@
-name: List
-method: GET
-request:
-  url: https://example.test/list

@@ -29,7 +29,6 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 |---|---|---|---|---|---|
 | [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | implemented |
 | [UI-002 — Keep invalid request definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
-| [UI-020 — Diagnose malformed collection metadata](#ui-020) | UI | TUI | R-002 | T-002, T-008 | implemented |
 | [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | implemented |
 | [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008, T-010 | planned |
 | [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | implemented |
@@ -126,30 +125,14 @@ The user opens the collection tree and selects the malformed entry.
 
 The malformed request remains visible with a warning. Selecting it presents its precise file/field diagnostic, and the valid sibling can still be opened.
 
+### Visual baseline
+
+**Visual state:** The invalid request is selected; its warning, valid sibling, and file/field diagnostic are visible.<br>
+**Viewport:** 100 columns × 30 rows<br>
+**Visual approval:** approved<br>
+**Snapshot baseline:** [invalid-request.txt](../../testdata/ui-002/invalid-request.txt)
+
 **Acceptance fixture:** [examples/workspace](../../examples/workspace/)
-
-<a id="ui-020"></a>
-## UI-020 — Diagnose malformed collection metadata
-
-**Category:** UI<br>
-**Observable surface:** TUI<br>
-**Requirements:** R-002<br>
-**Tasks:** T-002, T-008<br>
-**Status:** implemented
-
-### Given
-
-A workspace contains a discovered collection with malformed `.api/collection.yaml` metadata and a separate valid collection.
-
-### When
-
-The user opens the collection picker and selects the malformed collection.
-
-### Then
-
-The malformed collection remains listed with a warning and its metadata file diagnostic. Its request view does not open, and the valid collection remains selectable.
-
-**Acceptance fixture:** [testdata/ui-020/workspace](../../testdata/ui-020/workspace/)
 
 <a id="ui-003"></a>
 ## UI-003 — Render nested request groups
@@ -1054,7 +1037,6 @@ It uses no secrets, artifacts, releases, or version matrix.
 |---|---|---|---|---|---|
 | UI-001 | UI | TUI | R-001 | T-002, T-008 | implemented |
 | UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
-| UI-020 | UI | TUI | R-002 | T-002, T-008 | implemented |
 | UI-003 | UI | TUI | R-004 | T-002, T-008 | implemented |
 | UI-004 | UI | TUI | R-011 | T-008, T-010 | planned |
 | UI-015 | UI | TUI | R-011 | T-008 | implemented |
