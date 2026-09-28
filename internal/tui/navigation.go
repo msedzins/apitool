@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 
+	"apitool/internal/collection"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -166,9 +168,13 @@ func (m *Model) handleEnvironmentPicker(k tea.KeyMsg) {
 	envs := m.environmentNames()
 	switch k.Type {
 	case tea.KeyEsc:
-		m.mode = browseMode
+		if m.pendingEnvironment != "" {
+			m.mode = collectionPickerMode
+		} else {
+			m.mode = browseMode
+		}
 	case tea.KeyEnter:
-		if len(envs) > 0 {
+		if m.environmentIndex >= 0 && m.environmentIndex < len(envs) {
 			m.selectEnvironment(envs[m.environmentIndex])
 		}
 	case tea.KeyUp:
@@ -202,6 +208,20 @@ func (m *Model) openSelected() {
 	} else if row.kind == requestRow {
 		m.focus = requestPane
 		m.message = "Request: " + row.id
+	} else if row.kind == invalidRow {
+		if invalid, ok := m.view.Tree.Invalid[row.id]; ok {
+			details := make([]string, 0, len(invalid.Diagnostics))
+			for _, diagnostic := range invalid.Diagnostics {
+				if diagnostic.Path != "" && diagnostic.Message != "" {
+					details = append(details, diagnostic.Path+": "+diagnostic.Message)
+				} else if diagnostic.Path != "" {
+					details = append(details, diagnostic.Path)
+				} else if diagnostic.Message != "" {
+					details = append(details, diagnostic.Message)
+				}
+			}
+			m.message = strings.Join(details, " | ")
+		}
 	}
 }
 func (m *Model) collapseSelected() {
@@ -223,16 +243,27 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 	}
 	if x.X < m.explorerWidth() {
 		m.focus = collectionPane
-		row := x.Y - 2 + m.treeOffset
+		row := -1
+		if m.height > 0 && m.height < 12 {
+			row = x.Y - 2 + m.treeOffset
+		} else if x.Y >= 4 && x.Y < m.height-4 {
+			row = x.Y - 4 + m.treeOffset
+		}
 		rows := m.visibleRows()
 		if row >= 0 && row < len(rows) {
 			m.treeIndex = row
 			m.openSelected()
 		}
-	} else if x.Y < m.height/2 {
-		m.focus = requestPane
-	} else {
+	} else if m.height > 0 && m.height < 12 {
+		if x.Y < m.height/2 {
+			m.focus = requestPane
+		} else {
+			m.focus = responsePane
+		}
+	} else if x.Y >= 9 {
 		m.focus = responsePane
+	} else {
+		m.focus = requestPane
 	}
 }
 func (m *Model) syncViewport() {
@@ -256,13 +287,15 @@ func (m *Model) syncViewport() {
 	}
 }
 func (m Model) explorerCapacity() int {
-	if m.height <= 0 {
-		return 22
+	height := m.height
+	if height <= 0 {
+		height = 24
 	}
-	if m.height-2 < 1 {
+	capacity := height - 8
+	if capacity < 1 {
 		return 1
 	}
-	return m.height - 2
+	return capacity
 }
 func (m *Model) openSearchSelection() {
 	rows := m.searchRows()
@@ -290,32 +323,47 @@ func (m Model) visibleRows() []treeRow {
 	if m.mode == searchMode {
 		return m.searchRows()
 	}
-	var r []treeRow
-	for _, g := range m.view.Tree.Groups {
-		if !m.ancestorsExpanded(g.ID) {
+	var rows []treeRow
+	groups := append([]collection.GroupNode(nil), m.view.Tree.Groups...)
+	sort.SliceStable(groups, func(i, j int) bool {
+		if groups[i].ID == m.collection {
+			return true
+		}
+		if groups[j].ID == m.collection {
+			return false
+		}
+		return groups[i].ID < groups[j].ID
+	})
+	for _, group := range groups {
+		if !m.ancestorsExpanded(group.ID) {
 			continue
 		}
-		r = append(r, treeRow{g.ID, groupRow})
+		rows = append(rows, treeRow{group.ID, groupRow})
+		if m.expanded[group.ID] {
+			for _, request := range m.groupRequests(group.ID) {
+				rows = append(rows, treeRow{request.ID, requestRow})
+			}
+		}
 	}
 	for _, id := range m.view.Tree.RequestIDs {
-		if !m.requestVisible(id) {
-			continue
+		request := m.view.Tree.Requests[id]
+		if len(request.Groups) == 0 {
+			rows = append(rows, treeRow{id, requestRow})
 		}
-		r = append(r, treeRow{id, requestRow})
 	}
-	bad := make([]string, 0, len(m.view.Tree.Invalid))
+	invalidIDs := make([]string, 0, len(m.view.Tree.Invalid))
 	for id := range m.view.Tree.Invalid {
-		bad = append(bad, id)
+		invalidIDs = append(invalidIDs, id)
 	}
-	sort.Strings(bad)
-	for _, id := range bad {
-		if !m.ancestorsExpanded(id) {
-			continue
+	sort.Strings(invalidIDs)
+	for _, id := range invalidIDs {
+		if m.ancestorsExpanded(id) {
+			rows = append(rows, treeRow{id, invalidRow})
 		}
-		r = append(r, treeRow{id, invalidRow})
 	}
-	return r
+	return rows
 }
+
 func (m Model) searchRows() []treeRow {
 	var r []treeRow
 	for _, id := range m.view.Tree.RequestIDs {

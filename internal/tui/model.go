@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"apitool/internal/app"
@@ -100,14 +101,36 @@ func (m *Model) openCollection(path string) {
 		m.message = err.Error()
 		return
 	}
+	for _, diagnostic := range view.Diagnostics {
+		if diagnostic.Code == "collection_load" {
+			m.collection, m.view = path, view
+			m.mode, m.collectionIndex = collectionPickerMode, indexOf(m.collections, path)
+			m.message = diagnostic.Path + ": " + diagnostic.Message
+			return
+		}
+	}
+	m.message = ""
+	if m.pendingEnvironment != "" {
+		if _, ok := view.Environments[m.pendingEnvironment]; !ok {
+			view.Environment = ""
+			m.collection, m.view, m.treeIndex, m.focus = path, view, 0, collectionPane
+			m.mode, m.environmentIndex = environmentPickerMode, -1
+			m.message = fmt.Sprintf("collection %q has no environment %q", path, m.pendingEnvironment)
+			return
+		}
+		environment := m.pendingEnvironment
+		m.pendingEnvironment = ""
+		m.collection, m.view, m.treeIndex, m.focus, m.mode = path, view, 0, collectionPane, browseMode
+		for _, group := range view.Tree.Groups {
+			m.expanded[group.ID] = true
+		}
+		_ = m.service.SaveUIPreferences(path, m.explorer)
+		m.selectEnvironment(environment)
+		return
+	}
 	m.collection, m.view, m.treeIndex, m.focus, m.mode = path, view, 0, collectionPane, browseMode
 	for _, group := range view.Tree.Groups {
 		m.expanded[group.ID] = true
-	}
-	if m.pendingEnvironment != "" {
-		environment := m.pendingEnvironment
-		m.pendingEnvironment = ""
-		m.selectEnvironment(environment)
 	}
 	_ = m.service.SaveUIPreferences(path, m.explorer)
 }
@@ -119,4 +142,5 @@ func (m *Model) selectEnvironment(environment string) {
 		return
 	}
 	m.view, m.mode, m.message = view, browseMode, ""
+	m.pendingEnvironment = ""
 }

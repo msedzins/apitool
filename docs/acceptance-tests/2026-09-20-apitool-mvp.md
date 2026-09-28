@@ -28,9 +28,9 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | Test case | Category | Observable surface | Requirements | Tasks | Status |
 |---|---|---|---|---|---|
 | [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | implemented |
-| [UI-002 — Keep invalid definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
-| [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | planned |
-| [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008 | planned |
+| [UI-002 — Keep invalid definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
+| [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | implemented |
+| [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008, T-010 | planned |
 | [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | implemented |
 | [UI-016 — Restore the prior view after closing help](#ui-016) | UI | TUI | R-011 | T-008 | implemented |
 | [UI-017 — Show the active pane during keyboard navigation](#ui-017) | UI | TUI | R-011 | T-008 | implemented |
@@ -39,9 +39,9 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [CFG-001 — Save a valid request edit](#cfg-001) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-002 — Block invalid configuration](#cfg-002) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | [CFG-003 — Block literal client secrets](#cfg-003) | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
-| [CFG-004 — Restore a collection environment](#cfg-004) | CFG | TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | planned |
+| [CFG-004 — Restore a collection environment](#cfg-004) | CFG | TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | implemented |
 | [CFG-005 — Override startup environment](#cfg-005) | CFG | CLI, TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | planned |
-| [CFG-006 — Reject an unknown environment](#cfg-006) | CFG | CLI, TUI | R-005 | T-006, T-008 | planned |
+| [CFG-006 — Reject an unknown environment](#cfg-006) | CFG | CLI, TUI | R-005 | T-006, T-008 | implemented |
 | [API-001 — Send resolved environment values](#api-001) | API | API/Protocol (HTTP) | R-006 | T-003, T-004, T-006 | planned |
 | [API-002 — Diagnose a missing variable safely](#api-002) | API | TUI | R-006 | T-003, T-006 | planned |
 | [API-003 — Use nearest inherited authentication](#api-003) | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |
@@ -111,7 +111,7 @@ No workspace manifest or Git remote is required.
 **Observable surface:** TUI<br>
 **Requirements:** R-002<br>
 **Tasks:** T-001, T-002, T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -129,6 +129,11 @@ The entry remains visible with a warning and precise file/field diagnostic, whil
 
 Malformed collection metadata is diagnosed rather than silently hidden.
 
+The picker marks malformed collection metadata with a warning and shows its
+file diagnostic instead of opening that collection's request view. Invalid
+request definitions remain selectable for a precise diagnostic, while valid
+sibling requests remain available.
+
 <a id="ui-003"></a>
 ## UI-003 — Render nested request groups
 
@@ -136,7 +141,7 @@ Malformed collection metadata is diagnosed rather than silently hidden.
 **Observable surface:** TUI<br>
 **Requirements:** R-004<br>
 **Tasks:** T-002, T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -160,7 +165,7 @@ The underlying stable request ID is the collection-relative request path.
 **Category:** UI<br>
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
-**Tasks:** T-008<br>
+**Tasks:** T-008, T-010<br>
 **Status:** planned
 
 ### Given
@@ -1031,9 +1036,9 @@ It uses no secrets, artifacts, releases, or version matrix.
 | Test case | Category | Observable surface | Requirement | Task | Status |
 |---|---|---|---|---|---|
 | UI-001 | UI | TUI | R-001 | T-002, T-008 | implemented |
-| UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | planned |
-| UI-003 | UI | TUI | R-004 | T-002, T-008 | planned |
-| UI-004 | UI | TUI | R-011 | T-008 | planned |
+| UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
+| UI-003 | UI | TUI | R-004 | T-002, T-008 | implemented |
+| UI-004 | UI | TUI | R-011 | T-008, T-010 | planned |
 | UI-015 | UI | TUI | R-011 | T-008 | implemented |
 | UI-016 | UI | TUI | R-011 | T-008 | implemented |
 | UI-017 | UI | TUI | R-011 | T-008 | implemented |
@@ -1042,9 +1047,9 @@ It uses no secrets, artifacts, releases, or version matrix.
 | CFG-001 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-002 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
 | CFG-003 | CFG | TUI, Filesystem/Git | R-003 | T-001, T-009 | planned |
-| CFG-004 | CFG | TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | planned |
+| CFG-004 | CFG | TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | implemented |
 | CFG-005 | CFG | CLI, TUI, Filesystem/Git | R-005 | T-005, T-006, T-008 | planned |
-| CFG-006 | CFG | CLI, TUI | R-005 | T-006, T-008 | planned |
+| CFG-006 | CFG | CLI, TUI | R-005 | T-006, T-008 | implemented |
 | API-001 | API | API/Protocol (HTTP) | R-006 | T-003, T-004, T-006 | planned |
 | API-002 | API | TUI | R-006 | T-003, T-006 | planned |
 | API-003 | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |

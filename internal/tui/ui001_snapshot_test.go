@@ -86,7 +86,6 @@ func TestUI001ApprovedLayoutKeepsBrowseStateObservable(t *testing.T) {
 
 	t.Run("collapse and expand change the same-named root group tree", func(t *testing.T) {
 		model := ui001SelectedCollectionModel(t)
-		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
 		if got := model.View(); strings.Contains(got, "GET list") || strings.Contains(got, "POST create") {
 			t.Fatalf("collapsed tree = %q, want root requests hidden", got)

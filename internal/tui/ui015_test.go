@@ -14,12 +14,26 @@ import (
 func TestUI015FocusMarkersMatchApprovedScreens(t *testing.T) {
 	model := ui001SelectedCollectionModel(t)
 	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-001", "payments-tree.txt"))
+	assertSingleFocusMarker(t, model.View())
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-017", "request-focus.txt"))
+	assertSingleFocusMarker(t, model.View())
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-017", "response-focus.txt"))
+	assertSingleFocusMarker(t, model.View())
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-001", "payments-tree.txt"))
+	assertSingleFocusMarker(t, model.View())
+}
+
+func assertSingleFocusMarker(t *testing.T, view string) {
+	t.Helper()
+	if count := strings.Count(view, "▶"); count != 1 {
+		t.Fatalf("focus marker count = %d, want exactly one in %q", count, view)
+	}
 }
 
 func TestUI015HelpRestoresEveryTUIState(t *testing.T) {
@@ -28,7 +42,7 @@ func TestUI015HelpRestoresEveryTUIState(t *testing.T) {
 		model tea.Model
 	}{
 		{"collection view", ui001SelectedCollectionModel(t)},
-		{"collection picker", tui.New(fixtureService(t), tui.Options{})},
+		{"collection picker", tui.New(invalidCollectionMetadataService(t), tui.Options{})},
 		{"environment picker", environmentPickerModel(t)},
 		{"search", searchModel(t)},
 	}
@@ -60,9 +74,17 @@ func TestUI015KeyboardHelpMatchesApprovedScreenAndCompacts(t *testing.T) {
 	assertSnapshot(t, model.View(), filepath.Join("..", "..", "testdata", "ui-015", "keyboard-help.txt"))
 
 	compact := tui.New(fixtureService(t), tui.Options{})
-	compact, _ = compact.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	compact, _ = compact.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	compact, _ = compact.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	compactLines := strings.Split(strings.TrimSuffix(compact.View(), "\n"), "\n")
+	if len(compactLines) > 24 {
+		t.Fatalf("compact help has %d rows, want at most 24", len(compactLines))
+	}
+	for _, line := range compactLines {
+		if len([]rune(line)) > 80 {
+			t.Fatalf("compact help line exceeds 80 columns: %q", line)
+		}
+	}
 	for _, want := range []string{"Keyboard shortcuts", "Navigation", "Workspace", "Layout", "Help", "Exit"} {
 		if got := compact.View(); !strings.Contains(got, want) {
 			t.Fatalf("compact help = %q, want %q", got, want)
