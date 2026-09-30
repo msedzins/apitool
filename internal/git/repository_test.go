@@ -229,3 +229,79 @@ func writeWorkspaceChange(t *testing.T, root string) string {
 	}
 	return path
 }
+
+func TestDiffRedactsMultilineYAMLCredentials(t *testing.T) {
+	root := initGitRepo(t)
+	path := filepath.Join(root, "request.yaml")
+	partialPath := filepath.Join(root, "partial.yaml")
+	before := `name: Old request
+headers:
+  Authorization: |-
+    OLD_AUTHORIZATION_LINE_ONE
+    OLD_AUTHORIZATION_LINE_TWO
+  Cookie: >-
+    OLD_COOKIE_LINE_ONE
+    OLD_COOKIE_LINE_TWO
+auth:
+  access_token: >-
+    OLD_TOKEN_LINE_ONE
+    OLD_TOKEN_LINE_TWO
+  client_secret: "OLD_SECRET_LINE_ONE
+    OLD_SECRET_LINE_TWO"
+`
+	after := `name: Updated request
+headers:
+  Authorization: |-
+    NEW_AUTHORIZATION_LINE_ONE
+    NEW_AUTHORIZATION_LINE_TWO
+  Cookie: >-
+    NEW_COOKIE_LINE_ONE
+    NEW_COOKIE_LINE_TWO
+auth:
+  access_token: >-
+    NEW_TOKEN_LINE_ONE
+    NEW_TOKEN_LINE_TWO
+  client_secret: "NEW_SECRET_LINE_ONE
+    NEW_SECRET_LINE_TWO"
+`
+	partialBefore := "name: Partial\nauth:\n  client_secret: |-\n    OLD_PARTIAL_SECRET_ONE\n    OLD_PARTIAL_SECRET_TWO\nmetadata:\n  description: Original text\n"
+	partialAfter := "name: Partial\nauth:\n  client_secret: |-\n    OLD_PARTIAL_SECRET_ONE\n    OLD_PARTIAL_SECRET_TWO\nmetadata:\n  description: Updated text\n"
+	if err := os.WriteFile(path, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(partialPath, []byte(partialBefore), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "request.yaml", "partial.yaml"}, {"commit", "-qm", "add requests"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, output)
+		}
+	}
+	if err := os.WriteFile(path, []byte(after), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(partialPath, []byte(partialAfter), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	diff, err := git.New(root, exec.CommandContext).Diff(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, credential := range []string{
+		"OLD_AUTHORIZATION_LINE_ONE", "OLD_AUTHORIZATION_LINE_TWO", "NEW_AUTHORIZATION_LINE_ONE", "NEW_AUTHORIZATION_LINE_TWO",
+		"OLD_COOKIE_LINE_ONE", "OLD_COOKIE_LINE_TWO", "NEW_COOKIE_LINE_ONE", "NEW_COOKIE_LINE_TWO",
+		"OLD_TOKEN_LINE_ONE", "OLD_TOKEN_LINE_TWO", "NEW_TOKEN_LINE_ONE", "NEW_TOKEN_LINE_TWO",
+		"OLD_SECRET_LINE_ONE", "OLD_SECRET_LINE_TWO", "NEW_SECRET_LINE_ONE", "NEW_SECRET_LINE_TWO",
+		"OLD_PARTIAL_SECRET_ONE", "OLD_PARTIAL_SECRET_TWO",
+	} {
+		if strings.Contains(diff, credential) {
+			t.Fatalf("diff contains credential content %q: %s", credential, diff)
+		}
+	}
+	if !strings.Contains(diff, "Old request") || !strings.Contains(diff, "Updated request") || !strings.Contains(diff, "Original text") || !strings.Contains(diff, "Updated text") {
+		t.Fatalf("diff = %q, want unrelated definition changes preserved", diff)
+	}
+}
