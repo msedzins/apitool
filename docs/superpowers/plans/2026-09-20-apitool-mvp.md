@@ -25,7 +25,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 
 | Task | Status | Remaining work / scope |
 |---|---|---|
-| [T-001](#task-1-status) | Needs corrections | Reject unsupported collection/group authentication. |
+| [T-001](#task-1-status) | Implemented | Reject unsupported collection/group authentication. |
 | [T-002](#task-2-status) | Implemented | Discovery and inherited diagnostics reviewed; execution enforcement is tracked in Task 6. |
 | [T-003](#task-3-status) | Needs corrections | Validate effective inherited auth before execution. |
 | [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
@@ -89,7 +89,7 @@ Tasks 1–7 establish a headless, testable application. Tasks 8–11 layer the T
 <a id="task-1-status"></a>
 ### Task 1: Bootstrap, typed definitions, YAML persistence, and structural validation
 
-**Status:** Needs corrections
+**Status:** Implemented
 
 **Files:**
 - Create: `go.mod`
@@ -196,11 +196,11 @@ git commit -m "feat: add YAML definition model and validation"
 
 Files: `internal/collection/yaml_store.go`, `internal/validate/definition.go`, `internal/collection/yaml_store_test.go`, `internal/validate/definition_test.go`.
 
-- [ ] Write `TestCollectionAndGroupRejectUnsupportedAuth` for `type: basic`, OAuth `grant: authorization_code`, and missing OAuth fields; assert a safe validation error at collection/group load, while omitted auth and `auth: none` remain valid.
-- [ ] Run `go test ./internal/collection ./internal/validate -run 'TestCollectionAndGroupRejectUnsupportedAuth'`; confirm it fails on the current implementation.
-- [ ] Apply shared auth validation to collection and group definitions, preserving single process-variable client-secret references and accepted scope forms. Attach safe field/source diagnostics without credential values.
-- [ ] Run `go test ./internal/collection ./internal/validate`; require PASS.
-- [ ] Review the correction and commit it; keep the task Needs corrections until verification/review passes.
+- [x] Write `TestCollectionAndGroupRejectUnsupportedAuth` for `type: basic`, OAuth `grant: authorization_code`, and missing OAuth fields; assert a safe validation error at collection/group load, while omitted auth and `auth: none` remain valid.
+- [x] Run `go test ./internal/collection ./internal/validate -run 'TestCollectionAndGroupRejectUnsupportedAuth'`; confirm it fails on the current implementation.
+- [x] Apply shared auth validation to collection and group definitions, preserving single process-variable client-secret references and accepted scope forms. Attach safe field/source diagnostics without credential values.
+- [x] Run `go test ./internal/collection ./internal/validate`; require PASS.
+- [x] Review the correction and commit it; keep the task Needs corrections until verification/review passes.
 
 
 <a id="task-2-status"></a>

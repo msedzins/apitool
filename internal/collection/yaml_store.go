@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"apitool/internal/model"
+	"apitool/internal/validate"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,7 +36,7 @@ func LoadCollectionMeta(path string) (model.Collection, error) {
 	if err := validateHTTPConfig(collection.HTTP); err != nil {
 		return model.Collection{}, fmt.Errorf("collection HTTP configuration: %w", err)
 	}
-	if err := rejectLiteralSecret(collection.Auth); err != nil {
+	if err := validateAuthSource(path, collection.Auth); err != nil {
 		return model.Collection{}, err
 	}
 	return collection, nil
@@ -99,10 +100,22 @@ func LoadGroup(path string) (model.Group, error) {
 	if err != nil {
 		return model.Group{}, fmt.Errorf("decode auth: %w", err)
 	}
-	if err := rejectLiteralSecret(auth); err != nil {
+	if err := validateAuthSource(path, auth); err != nil {
 		return model.Group{}, err
 	}
 	return model.Group{Name: document.Name, Auth: auth}, nil
+}
+
+func validateAuthSource(path string, auth *model.Auth) error {
+	diagnostics := validate.Auth(auth)
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	items := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		items = append(items, diagnostic.Path+": "+diagnostic.Message)
+	}
+	return fmt.Errorf("%s: %s", path, strings.Join(items, "; "))
 }
 
 // SaveRequest writes request to path atomically. Client secrets must remain
