@@ -53,6 +53,7 @@ func (m *Model) beginDuplicate() {
 	m.editor.SetName("Copy of " + request.Name)
 	m.editorField, m.replaceField = 7, true
 	m.fieldDraft, m.fieldDraftDirty = targetID, false
+	m.fieldCursor = len([]rune(targetID))
 	m.duplicateFlow = true
 	m.duplicateTarget = targetID
 	m.message = ""
@@ -76,7 +77,11 @@ func (m Model) confirmationView() string {
 	}
 	switch m.prompt.kind {
 	case confirmDirtyNavigation:
-		view := "Unsaved request changes\nSave and continue (s)\nDiscard changes (d)\nCancel (c/Esc)\n"
+		action := "continue"
+		if m.prompt.targetID == "" {
+			action = "close"
+		}
+		view := "Unsaved request changes\nSave and " + action + " (s)\nDiscard changes and " + action + " (d)\nCancel (c/Esc)\n"
 		if m.message != "" {
 			view += "Status: " + m.message + "\n"
 		}
@@ -121,12 +126,15 @@ func (m *Model) handleConfirmation(key tea.KeyMsg) tea.Cmd {
 			target := m.prompt.targetID
 			m.prompt = nil
 			m.discardEdits()
-			m.beginEdit(target)
+			if target != "" {
+				m.beginEdit(target)
+			}
 		}
 	case confirmDeleteTarget:
 		if strings.ToLower(value) == "y" {
 			target := m.prompt.deleteTarget
 			m.prompt = nil
+			m.saving = true
 			return func() tea.Msg {
 				_, err := m.service.Delete(context.Background(), target.Collection, target.RequestID, target.Group, true)
 				return deleteFinishedMsg{target: target, err: err}

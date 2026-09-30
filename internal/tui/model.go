@@ -66,6 +66,8 @@ type Model struct {
 	replaceField                                 bool
 	fieldDraft                                   string
 	fieldDraftDirty                              bool
+	fieldCursor                                  int
+	bodyScroll                                   int
 	saving                                       bool
 	prompt                                       *confirmation
 	duplicateFlow                                bool

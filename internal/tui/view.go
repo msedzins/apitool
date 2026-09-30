@@ -49,7 +49,11 @@ func (m Model) View() string {
 		return m.confirmationView()
 	}
 	if m.mode == requestEditMode && m.height > 0 && m.height < 22 {
-		return m.editorDisplay()
+		view := m.editorDisplay()
+		if m.help {
+			return m.helpView(view)
+		}
+		return view
 	}
 	var view string
 	if m.mode == collectionPickerMode {
@@ -106,7 +110,7 @@ func (m Model) collectionView() string {
 	}
 	if height > 3 {
 		if m.mode == requestEditMode && m.editor != nil {
-			right[3] = " Edit request fields | Tab/Enter next | Ctrl+S save"
+			right[3] = "Tab next • Enter newline • Ctrl+S save • ? help"
 		} else {
 			right[3] = " Params | Headers | Auth | Body | Settings"
 		}
@@ -140,26 +144,61 @@ func (m Model) collectionView() string {
 	}
 	responseDivider := 8
 	if m.mode == requestEditMode && m.editor != nil && height >= 22 {
-		responseDivider = 13
-		labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", "Body (JSON)"}
+		responseDivider = 17
+		labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth"}
 		for index, label := range labels {
 			row := index + 4
-			if row >= responseDivider {
-				break
-			}
 			value := m.editorFieldTextFor(index)
-			value = strings.ReplaceAll(value, "\n", "\\n")
 			marker := "  "
 			if m.editorField == index {
 				marker = "▶ "
 			}
 			right[row] = marker + label + ": " + value
 		}
-		if m.duplicateFlow && responseDivider-2 < height {
-			right[responseDivider-2] = "  Save as: " + m.editorFieldTextFor(7)
+		bodyMode := "JSON"
+		if m.editor.mode == BodyModeRaw {
+			bodyMode = "Raw"
 		}
-		if m.editor.validation != "" {
-			right[responseDivider-1] = "  Validation: " + m.editor.validation
+		marker := "  "
+		if m.editorField == 6 {
+			marker = "▶ "
+		}
+		right[10] = marker + "Body (" + bodyMode + ")"
+		body := m.editorFieldTextFor(6)
+		bodyLines := strings.Split(body, "\n")
+		cursorRow, cursorCol := bodyCursorPosition(body, m.fieldCursor)
+		visibleRows := 5
+		if m.editorField == 6 {
+			if cursorRow < m.bodyScroll {
+				m.bodyScroll = cursorRow
+			}
+			if cursorRow >= m.bodyScroll+visibleRows {
+				m.bodyScroll = cursorRow - visibleRows + 1
+			}
+		}
+		for offset := 0; offset < visibleRows && 11+offset < responseDivider; offset++ {
+			lineIndex := m.bodyScroll + offset
+			if lineIndex >= len(bodyLines) {
+				break
+			}
+			line := bodyLines[lineIndex]
+			available := max(1, rightWidth-2)
+			if m.editorField == 6 && lineIndex == cursorRow {
+				line = scrollBodyLineToCursor(line, cursorCol, available)
+			} else {
+				line = truncateRunes(line, available)
+			}
+			right[11+offset] = "  " + line
+		}
+		if m.duplicateFlow && responseDivider-1 < height {
+			right[responseDivider-1] = "  Save as: " + m.editorFieldTextFor(7)
+		} else if m.editor.Validation() != "" && responseDivider-1 < height {
+			validation := []rune(m.editor.Validation())
+			available := max(0, rightWidth-len([]rune("  Validation: ")))
+			if len(validation) > available {
+				validation = validation[len(validation)-available:]
+			}
+			right[responseDivider-1] = "  Validation: " + string(validation)
 		}
 	}
 	if responseDivider < height {
@@ -168,8 +207,12 @@ func (m Model) collectionView() string {
 	if responseDivider+2 < height {
 		right[responseDivider+2] = " Select Send to execute this request."
 		messageRows := 0
-		if m.message != "" {
-			status := m.message
+		if m.message != "" || (m.mode == requestEditMode && m.editor != nil && m.editor.Validation() != "") {
+			statusText := m.message
+			if statusText == "" && m.editor != nil {
+				statusText = m.editor.Validation()
+			}
+			status := statusText
 			if m.mode == requestEditMode {
 				status = " Status: " + status
 			}
@@ -226,6 +269,9 @@ func panePrefix(active bool) string {
 func paneHeading(active bool, text string) string { return panePrefix(active) + text }
 
 func (m Model) helpView(background string) string {
+	if m.mode == requestEditMode {
+		return editorHelpView()
+	}
 	if m.mode != browseMode || m.width < 100 || m.height < 30 {
 		return compactHelpView()
 	}
@@ -261,6 +307,48 @@ func (m Model) helpView(background string) string {
 		lines[lineIndex] = string(base)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func bodyCursorPosition(text string, cursor int) (int, int) {
+	runes := []rune(text)
+	cursor = max(0, min(cursor, len(runes)))
+	before := string(runes[:cursor])
+	row := strings.Count(before, "\n")
+	column := len([]rune(before[strings.LastIndex(before, "\n")+1:]))
+	return row, column
+}
+func insertRuneMarker(text string, column int) string {
+	runes := []rune(text)
+	column = max(0, min(column, len(runes)))
+	return string(runes[:column]) + "▏" + string(runes[column:])
+}
+func scrollBodyLineToCursor(text string, column, width int) string {
+	runes := []rune(text)
+	column = max(0, min(column, len(runes)))
+	width = max(width, 1)
+	start := max(0, column-width+1)
+	end := min(len(runes), start+width-1)
+	return insertRuneMarker(string(runes[start:end]), column-start)
+}
+func truncateRunes(text string, width int) string {
+	runes := []rune(text)
+	return string(runes[:min(len(runes), max(width, 0))])
+}
+
+func editorHelpView() string {
+	return strings.Join([]string{
+		"Request editor shortcuts",
+		"Fields      Tab next",
+		"Body        Enter inserts newline",
+		"Cursor      ←/→ move • Home/End line • ↑/↓ body lines",
+		"Requests    Ctrl+↑/↓ previous/next",
+		"Save        Ctrl+S save • Esc close",
+		"Body mode   Ctrl+B toggle JSON/raw",
+		"History     Ctrl+Z undo • Ctrl+Y redo",
+		"Actions     Ctrl+P duplicate/delete",
+		"Help        ? or Esc close",
+		"Exit        Ctrl+C quit",
+	}, "\n") + "\n"
 }
 
 func compactHelpView() string {

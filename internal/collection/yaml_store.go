@@ -2,6 +2,7 @@
 package collection
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -161,18 +162,73 @@ func decodeRequestConfig(document requestConfigDocument) (model.RequestConfig, e
 	return config, nil
 }
 func decodeBodyNode(node *yaml.Node) (any, error) {
+	return decodeBodyNodeVisited(node, map[*yaml.Node]bool{})
+}
+func decodeBodyNodeVisited(node *yaml.Node, stack map[*yaml.Node]bool) (any, error) {
 	if node == nil || node.Kind == 0 {
 		return nil, nil
+	}
+	if stack[node] {
+		return nil, fmt.Errorf("cyclic YAML alias in JSON body")
+	}
+	stack[node] = true
+	defer delete(stack, node)
+	if node.Kind == yaml.AliasNode {
+		return decodeBodyNodeVisited(node.Alias, stack)
 	}
 	switch node.Kind {
 	case yaml.MappingNode:
 		result := make(map[string]any, len(node.Content)/2)
+		var mergeNodes []*yaml.Node
+		seenKeys := map[string]bool{}
 		for index := 0; index < len(node.Content); index += 2 {
-			key := node.Content[index]
+			key, value := node.Content[index], node.Content[index+1]
+			if key.Tag == "!!merge" {
+				mergeNodes = append(mergeNodes, value)
+				continue
+			}
 			if key.Tag != "!!str" {
 				return nil, fmt.Errorf("JSON body object keys must be strings")
 			}
-			value, err := decodeBodyNode(node.Content[index+1])
+			if seenKeys[key.Value] {
+				return nil, fmt.Errorf("duplicate JSON body key %q", key.Value)
+			}
+			seenKeys[key.Value] = true
+		}
+		for _, mergeNode := range mergeNodes {
+			merged, err := decodeBodyNodeVisited(mergeNode, stack)
+			if err != nil {
+				return nil, err
+			}
+			maps := []map[string]any{}
+			switch value := merged.(type) {
+			case map[string]any:
+				maps = append(maps, value)
+			case []any:
+				for _, item := range value {
+					mapping, ok := item.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("YAML merge sequence must contain mappings")
+					}
+					maps = append(maps, mapping)
+				}
+			default:
+				return nil, fmt.Errorf("YAML merge value must be a mapping or sequence of mappings")
+			}
+			for _, mapping := range maps {
+				for key, value := range mapping {
+					if _, exists := result[key]; !exists {
+						result[key] = value
+					}
+				}
+			}
+		}
+		for index := 0; index < len(node.Content); index += 2 {
+			key, valueNode := node.Content[index], node.Content[index+1]
+			if key.Tag == "!!merge" {
+				continue
+			}
+			value, err := decodeBodyNodeVisited(valueNode, stack)
 			if err != nil {
 				return nil, err
 			}
@@ -182,7 +238,7 @@ func decodeBodyNode(node *yaml.Node) (any, error) {
 	case yaml.SequenceNode:
 		result := make([]any, len(node.Content))
 		for index, child := range node.Content {
-			value, err := decodeBodyNode(child)
+			value, err := decodeBodyNodeVisited(child, stack)
 			if err != nil {
 				return nil, err
 			}
@@ -196,41 +252,105 @@ func decodeBodyNode(node *yaml.Node) (any, error) {
 		case "!!null":
 			return nil, nil
 		case "!!bool":
-			return node.Value == "true", nil
-		case "!!int", "!!float":
-			value := strings.ReplaceAll(node.Value, "_", "")
-			if node.Tag == "!!int" {
-				if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") || strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O") || strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") {
-					base := 0
-					number, ok := new(big.Int).SetString(value, base)
-					if !ok {
-						return nil, fmt.Errorf("invalid JSON body integer")
-					}
-					value = number.String()
-				} else if strings.HasPrefix(value, "+") {
-					value = strings.TrimPrefix(value, "+")
-				}
-				if integer, err := strconv.ParseInt(value, 10, 64); err == nil {
-					return int(integer), nil
-				}
-				return model.JSONNumber(value), nil
+			var value bool
+			if err := node.Decode(&value); err != nil {
+				return nil, err
 			}
-			if strings.HasPrefix(value, ".") {
-				value = "0" + value
+			return value, nil
+		case "!!int":
+			return decodeYAMLInteger(node.Value)
+		case "!!float":
+			return decodeYAMLFloat(node.Value)
+		case "!!timestamp":
+			var value time.Time
+			if err := node.Decode(&value); err != nil {
+				return nil, err
 			}
-			if strings.HasPrefix(value, "-.") {
-				value = "-0" + value
+			return value, nil
+		case "!!binary":
+			var value any
+			if err := node.Decode(&value); err != nil {
+				return nil, err
 			}
-			if strings.HasSuffix(value, ".") {
-				value += "0"
-			}
-			return model.JSONNumber(value), nil
+			return value, nil
 		default:
 			return nil, fmt.Errorf("unsupported YAML scalar %s in JSON body", node.Tag)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported YAML node in JSON body")
 	}
+}
+func decodeYAMLInteger(raw string) (any, error) {
+	value := strings.ReplaceAll(raw, "_", "")
+	sign := 1
+	if strings.HasPrefix(value, "-") {
+		sign = -1
+		value = value[1:]
+	} else if strings.HasPrefix(value, "+") {
+		value = value[1:]
+	}
+	base := 10
+	switch {
+	case strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X"):
+		base, value = 16, value[2:]
+	case strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O"):
+		base, value = 8, value[2:]
+	case strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B"):
+		base, value = 2, value[2:]
+	case len(value) > 1 && value[0] == '0':
+		base, value = 8, value[1:]
+	}
+	number, ok := new(big.Int).SetString(value, base)
+	if !ok {
+		return nil, fmt.Errorf("invalid YAML integer %q", raw)
+	}
+	if sign < 0 {
+		number.Neg(number)
+	}
+	decimal := number.String()
+	if integer, err := strconv.ParseInt(decimal, 10, 64); err == nil {
+		return int(integer), nil
+	}
+	return model.JSONNumber(decimal), nil
+}
+func decodeYAMLFloat(raw string) (any, error) {
+	value := strings.ReplaceAll(raw, "_", "")
+	sign := ""
+	if strings.HasPrefix(value, "+") {
+		value = value[1:]
+	} else if strings.HasPrefix(value, "-") {
+		sign, value = "-", value[1:]
+	}
+	exponent := ""
+	if index := strings.IndexAny(value, "eE"); index >= 0 {
+		exponent, value = value[index:], value[:index]
+	}
+	before, after, hasDot := strings.Cut(value, ".")
+	if !hasDot {
+		after = ""
+	}
+	if before == "" {
+		before = "0"
+	}
+	trimmed := strings.TrimLeft(before, "0")
+	if trimmed != "" {
+		before = trimmed
+	} else {
+		before = "0"
+	}
+	if hasDot && after == "" {
+		after = "0"
+	}
+	canonical := sign + before
+	if hasDot {
+		canonical += "." + after
+	}
+	canonical += exponent
+	number := model.JSONNumber(canonical)
+	if _, err := json.Marshal(number); err != nil {
+		return nil, fmt.Errorf("unsupported YAML float %q in JSON body", raw)
+	}
+	return number, nil
 }
 
 type collectionDocument struct {

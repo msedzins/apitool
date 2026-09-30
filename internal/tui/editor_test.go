@@ -553,3 +553,200 @@ func TestAuthFieldTextPreservesTypedOAuthConfiguration(t *testing.T) {
 		t.Fatalf("OAuth config after field round trip = %#v, want %#v", got, request.Auth)
 	}
 }
+
+func TestTabLoadsTheNextFieldValue(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	if got := m.editorFieldText(); got != m.editor.FieldText(1) {
+		t.Fatalf("method draft = %q, want %q", got, m.editor.FieldText(1))
+	}
+}
+
+func TestMalformedMapDraftBlocksSaveWithoutClearingHeaders(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editor.SetHeaders(map[string]string{"Accept": "application/json"})
+	for range 4 {
+		m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(`{"Accept":`)})
+	if _, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyCtrlS}); cmd != nil {
+		t.Fatal("Ctrl+S issued command for invalid headers")
+	}
+	if got := m.editor.Request().Request.Headers["Accept"]; got != "application/json" {
+		t.Fatalf("saved header draft mutated typed request: %q", got)
+	}
+	if !strings.Contains(m.editor.Validation(), "JSON") {
+		t.Fatalf("validation = %q, want JSON parse error", m.editor.Validation())
+	}
+}
+
+func TestMalformedAuthDraftBlocksSaveWithoutUsingOldAuth(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	oldAuth := &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "old-client", ClientSecret: "${OLD_SECRET}"}
+	m.editor.SetAuth(oldAuth)
+	for range 5 {
+		m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(`{"type":`)})
+	if _, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyCtrlS}); cmd != nil {
+		t.Fatal("Ctrl+S issued command for invalid auth")
+	}
+	if !strings.Contains(m.editor.Validation(), "auth") {
+		t.Fatalf("validation = %q, want auth parse error", m.editor.Validation())
+	}
+	if got := m.editor.Request().Auth; !reflect.DeepEqual(got, oldAuth) {
+		t.Fatalf("invalid auth draft changed typed value: %#v", got)
+	}
+}
+
+func TestBodyKeyboardSupportsCursorMovementAndNewlines(t *testing.T) {
+	m := editorWithJSON(t, `"ab"`)
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	m.editorField = 6
+	m.fieldDraft = "ab"
+	m.fieldCursor = 2
+	m.fieldDraftDirty = false
+	m.replaceField = false
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyLeft})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if got := m.fieldDraft; got != "a\nb" {
+		t.Fatalf("body draft after Left, Enter = %q, want newline inserted at cursor", got)
+	}
+}
+
+func TestHelpOpensFromEditorWithoutChangingDraft(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	before := m.fieldDraft
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if !m.help {
+		t.Fatal("? did not open help while editing")
+	}
+	if m.fieldDraft != before {
+		t.Fatalf("help key changed draft from %q to %q", before, m.fieldDraft)
+	}
+	if !strings.Contains(m.View(), "Request editor shortcuts") {
+		t.Fatalf("editor help lacks its shortcuts: %q", m.View())
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.help || m.fieldDraft != before {
+		t.Fatal("closing editor help changed editor state")
+	}
+}
+
+func TestDirtyEscDiscardClosesEditor(t *testing.T) {
+	m := editorWithChangedURL(t)
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	if m.editor != nil || m.mode != browseMode {
+		t.Fatal("discard from Esc did not close the editor")
+	}
+}
+
+func TestDeleteLocksEditorUntilCompletion(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.beginDelete("nested", true)
+	cmd := m.handleConfirmation(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	if cmd == nil {
+		t.Fatal("delete command was not issued")
+	}
+	before := m.fieldDraft
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if m.fieldDraft != before {
+		t.Fatalf("draft changed during deletion: %q -> %q", before, m.fieldDraft)
+	}
+	if !m.saving {
+		t.Fatal("editor was not locked while deletion was pending")
+	}
+	m.beginEdit("one")
+	m, _ = updateModel(m, cmd())
+	if m.editor == nil || m.editor.Selection().RequestID != "one" {
+		t.Fatal("deletion completion discarded an unrelated active editor")
+	}
+}
+
+func TestRawBodyLabelIsNotJSON(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	if got := m.View(); !strings.Contains(got, "Body (Raw)") {
+		t.Fatalf("raw editor view lacks mode label: %q", got)
+	}
+}
+
+func TestBodyViewScrollsToCursorLine(t *testing.T) {
+	m := editorWithJSON(t, `"body"`)
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	m.editorField = 6
+	m.fieldDraft = "line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7"
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	m.fieldDraftDirty = false
+	view := m.View()
+	if !strings.Contains(view, "line7▏") || !strings.Contains(view, "line3") {
+		t.Fatalf("body viewport does not show scrolled cursor and context: %q", view)
+	}
+}
+
+func TestInvalidFieldDraftBlocksRequestNavigation(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	for range 4 {
+		m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(`{"Accept":`)})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyDown})
+	if m.editor.Selection().RequestID != "one" || m.editorField != 4 || m.fieldDraft != `{"Accept":` {
+		t.Fatalf("invalid field navigation lost editor/draft: id=%q field=%d draft=%q", m.editor.Selection().RequestID, m.editorField, m.fieldDraft)
+	}
+}
+
+func TestDirtyEscSaveClosesEditor(t *testing.T) {
+	m := editorWithChangedURL(t)
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !strings.Contains(m.View(), "Save and close") {
+		t.Fatalf("dirty Esc prompt = %q", m.View())
+	}
+	m, cmd := updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	if cmd == nil {
+		t.Fatal("Save and close did not start save")
+	}
+	m, _ = updateModel(m, cmd())
+	if m.mode != browseMode || m.editor != nil {
+		t.Fatal("Save and close reopened the editor")
+	}
+}
+
+func TestBodyViewScrollsHorizontallyToCursor(t *testing.T) {
+	m := editorWithJSON(t, `"body"`)
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	m.editorField = 6
+	m.fieldDraft = strings.Repeat("a", 80) + "TAIL"
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	view := m.View()
+	if !strings.Contains(view, "TAIL▏") {
+		t.Fatalf("body viewport clipped the cursor at the end of a long line: %q", view)
+	}
+}
+
+func TestNonObjectAuthDraftIsRejectedWithoutChangingAuth(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	original := &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token"}
+	m.editor.SetAuth(original)
+	m.editor.SetFieldText(5, "null")
+	if !strings.Contains(m.editor.Validation(), "auth") {
+		t.Fatalf("validation = %q, want invalid auth object", m.editor.Validation())
+	}
+	if got := m.editor.Request().Auth; !reflect.DeepEqual(got, original) {
+		t.Fatalf("non-object auth changed the typed value: %#v", got)
+	}
+}
+
+func TestCompactBodyEditorShowsCursorInMultilineDraft(t *testing.T) {
+	m := editorWithJSON(t, `"body"`)
+	m.height = 16
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	m.editorField = 6
+	m.fieldDraft = "first\nsecond"
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	view := m.View()
+	if !strings.Contains(view, "second▏") {
+		t.Fatalf("compact body editor hides cursor: %q", view)
+	}
+}

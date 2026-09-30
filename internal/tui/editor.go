@@ -35,6 +35,7 @@ type RequestEditor struct {
 	undo       []editorSnapshot
 	redo       []editorSnapshot
 	validation string
+	fieldError string
 }
 
 type editorSnapshot struct {
@@ -55,6 +56,7 @@ func (e *RequestEditor) Load(request model.Request) {
 	e.original = cloneRequest(request)
 	e.undo, e.redo = nil, nil
 	e.validation = ""
+	e.fieldError = ""
 	e.mode = BodyModeJSON
 	e.bodyText = ""
 	if request.Request.Body != nil {
@@ -177,7 +179,12 @@ func (e *RequestEditor) SetAuth(value *model.Auth) {
 
 func (e *RequestEditor) SetSelection(selection app.Selection) { e.selection = selection }
 func (e *RequestEditor) Selection() app.Selection             { return e.selection }
-func (e *RequestEditor) Validation() string                   { return e.validation }
+func (e *RequestEditor) Validation() string {
+	if e.fieldError != "" {
+		return e.fieldError
+	}
+	return e.validation
+}
 
 // FieldText returns the editable text for the typed editor field at index.
 func (e *RequestEditor) FieldText(index int) string {
@@ -203,6 +210,7 @@ func (e *RequestEditor) FieldText(index int) string {
 
 // SetFieldText parses the selected typed field, keeping YAML serialization outside the TUI.
 func (e *RequestEditor) SetFieldText(index int, value string) {
+	e.fieldError = ""
 	switch index {
 	case 0:
 		e.SetName(value)
@@ -210,10 +218,17 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 		e.SetMethod(value)
 	case 2:
 		e.SetURL(value)
-	case 3:
-		e.SetParams(parseStringMap(value))
-	case 4:
-		e.SetHeaders(parseStringMap(value))
+	case 3, 4:
+		values, err := parseStringMap(value)
+		if err != nil {
+			e.fieldError = "map field must be a JSON object: " + err.Error()
+			return
+		}
+		if index == 3 {
+			e.SetParams(values)
+		} else {
+			e.SetHeaders(values)
+		}
 	case 5:
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" || trimmed == "inherit" {
@@ -221,7 +236,12 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 		} else if trimmed == "none" {
 			e.SetAuth(&model.Auth{None: true})
 		} else {
-			var value struct {
+			var object map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(trimmed), &object); err != nil || object == nil {
+				e.fieldError = "auth must be inherit, none, or a JSON OAuth object"
+				return
+			}
+			var auth struct {
 				Type         string   `json:"type"`
 				Grant        string   `json:"grant"`
 				TokenURL     string   `json:"token_url"`
@@ -229,10 +249,10 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 				ClientSecret string   `json:"client_secret"`
 				Scopes       []string `json:"scopes"`
 			}
-			if err := json.Unmarshal([]byte(trimmed), &value); err != nil {
-				e.validation = "auth must be inherit, none, or a JSON OAuth object"
+			if err := json.Unmarshal([]byte(trimmed), &auth); err != nil {
+				e.fieldError = "auth must be inherit, none, or a JSON OAuth object: " + err.Error()
 			} else {
-				e.SetAuth(&model.Auth{Type: value.Type, Grant: value.Grant, TokenURL: value.TokenURL, ClientID: value.ClientID, ClientSecret: value.ClientSecret, Scopes: value.Scopes})
+				e.SetAuth(&model.Auth{Type: auth.Type, Grant: auth.Grant, TokenURL: auth.TokenURL, ClientID: auth.ClientID, ClientSecret: auth.ClientSecret, Scopes: auth.Scopes})
 			}
 		}
 	case 6:
@@ -242,6 +262,10 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 
 // Save validates and persists the request through the application service.
 func (e *RequestEditor) Save() tea.Cmd {
+	if e.fieldError != "" {
+		e.validation = e.fieldError
+		return nil
+	}
 	request, err := e.validatedRequest()
 	if err != nil {
 		e.validation = err.Error()
@@ -397,18 +421,21 @@ func formatStringMap(values map[string]string) string {
 	data, _ := json.Marshal(values)
 	return string(data)
 }
-func parseStringMap(value string) map[string]string {
-	var result map[string]string
+func parseStringMap(value string) (map[string]string, error) {
 	if strings.TrimSpace(value) == "" {
-		return nil
+		return nil, nil
 	}
-	if json.Unmarshal([]byte(value), &result) != nil {
-		return nil
+	var result map[string]string
+	if err := json.Unmarshal([]byte(value), &result); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("expected an object")
 	}
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
-	return result
+	return result, nil
 }
 
 func cloneMap(source map[string]string) map[string]string {
@@ -430,6 +457,20 @@ func cloneAuth(source *model.Auth) *model.Auth {
 	return &copy
 }
 
+func flattenedBodyCursor(text string, cursor int) int {
+	runes := []rune(text)
+	cursor = max(0, min(cursor, len(runes)))
+	display := 0
+	for _, r := range runes[:cursor] {
+		if r == '\n' {
+			display += 2
+		} else {
+			display++
+		}
+	}
+	return display
+}
+
 func (m Model) editorDisplay() string {
 	if m.editor == nil {
 		return "Request editor unavailable\n"
@@ -440,7 +481,12 @@ func (m Model) editorDisplay() string {
 		mode = "Raw"
 	}
 	labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", "Body (" + mode + ")"}
-	values := []string{request.Name, request.Method, request.Request.URL, formatStringMap(request.Request.Params), formatStringMap(request.Request.Headers), formatAuth(request.Auth), strings.ReplaceAll(m.editor.bodyText, "\n", "\\n")}
+	bodyValue := m.editorFieldTextFor(6)
+	bodyDisplay := strings.ReplaceAll(bodyValue, "\n", "\\n")
+	if m.editorField == 6 {
+		bodyDisplay = insertRuneMarker(bodyDisplay, flattenedBodyCursor(bodyValue, m.fieldCursor))
+	}
+	values := []string{request.Name, request.Method, request.Request.URL, formatStringMap(request.Request.Params), formatStringMap(request.Request.Headers), formatAuth(request.Auth), bodyDisplay}
 	lines := []string{"Request editor — Ctrl+S save • Ctrl+Z undo • Ctrl+Y redo • Esc close"}
 	for index, label := range labels {
 		marker := "  "
@@ -448,7 +494,7 @@ func (m Model) editorDisplay() string {
 			marker = "▶ "
 		}
 		value := values[index]
-		if m.editorField == index {
+		if m.editorField == index && index != 6 {
 			value = m.editorFieldText()
 		}
 		lines = append(lines, marker+label+": "+value)

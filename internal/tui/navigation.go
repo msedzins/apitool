@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"apitool/internal/app"
 	"apitool/internal/collection"
+	"apitool/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -42,6 +44,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if x.Type == tea.KeyCtrlC {
 			return m, tea.Quit
 		}
+		if m.saving {
+			return m, nil
+		}
 		if m.help {
 			if x.Type == tea.KeyEsc || (x.Type == tea.KeyRunes && string(x.Runes) == "?") {
 				m.help = false
@@ -50,6 +55,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.prompt != nil {
 			return m, m.handleConfirmation(x)
+		}
+		if m.mode == requestEditMode && x.Type == tea.KeyRunes && string(x.Runes) == "?" {
+			m.help = true
+			return m, nil
 		}
 		if m.mode == requestEditMode {
 			return m, m.handleEditorKey(x)
@@ -128,7 +137,7 @@ func (m *Model) savePreferences() {
 func (m *Model) handleRune(s string) {
 	if s == "e" {
 		rows := m.visibleRows()
-		if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == requestRow {
+		if m.treeIndex >= 0 && m.treeIndex < len(rows) && m.canEditTreeRow(rows[m.treeIndex]) {
 			m.beginEdit(rows[m.treeIndex].id)
 		}
 		return
@@ -453,19 +462,56 @@ func indexOf(xs []string, w string) int {
 	return 0
 }
 
+func (m Model) canEditTreeRow(row treeRow) bool {
+	if row.kind == requestRow {
+		return true
+	}
+	if row.kind != invalidRow {
+		return false
+	}
+	invalid, ok := m.view.Tree.Invalid[row.id]
+	return ok && filepath.Ext(invalid.Path) == ".yaml" && filepath.Base(invalid.Path) != "_group.yaml"
+}
+
 func (m *Model) beginEdit(id string) {
-	node, ok := m.view.Tree.Requests[id]
-	if !ok {
+	request, ok := m.view.Tree.Requests[id]
+	var definition model.Request
+	if ok {
+		definition = request.Request
+	} else if invalid, exists := m.view.Tree.Invalid[id]; exists {
+		if invalid.Request != nil {
+			definition = *invalid.Request
+		} else {
+			name := filepath.Base(id)
+			definition = model.Request{Name: name, Method: "GET"}
+		}
+		m.message = invalidDiagnosticText(invalid)
+	} else {
 		m.message = fmt.Sprintf("request %q not found", id)
 		return
 	}
 	m.selectedID = id
-	m.editor = newRequestEditor(m.service, app.Selection{Collection: m.collection, Environment: m.view.Environment, RequestID: id}, node.Request)
+	m.editor = newRequestEditor(m.service, app.Selection{Collection: m.collection, Environment: m.view.Environment, RequestID: id}, definition)
 	m.mode, m.editorField, m.replaceField = requestEditMode, 0, true
 	m.fieldDraft = m.editor.FieldText(0)
 	m.fieldDraftDirty = false
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	m.bodyScroll = 0
 	m.duplicateFlow, m.duplicateTarget = false, ""
-	m.message = ""
+	if ok {
+		m.message = ""
+	}
+}
+func invalidDiagnosticText(invalid collection.InvalidNode) string {
+	parts := make([]string, 0, len(invalid.Diagnostics))
+	for _, diagnostic := range invalid.Diagnostics {
+		if diagnostic.Path != "" && diagnostic.Message != "" {
+			parts = append(parts, diagnostic.Path+": "+diagnostic.Message)
+		} else if diagnostic.Message != "" {
+			parts = append(parts, diagnostic.Message)
+		}
+	}
+	return strings.Join(parts, " | ")
 }
 
 func (m *Model) requestNavigation(direction int) {
@@ -499,7 +545,10 @@ func (m *Model) Save() tea.Cmd {
 	if m.editor == nil || m.saving {
 		return nil
 	}
-	m.commitEditorField()
+	if !m.commitEditorField() {
+		m.message = m.editor.Validation()
+		return nil
+	}
 	if m.duplicateFlow && (m.duplicateTarget == "" || m.requestIDExists(m.duplicateTarget)) {
 		m.message = "duplicate destination already exists or is empty"
 		return nil
@@ -512,9 +561,12 @@ func (m *Model) Save() tea.Cmd {
 	return cmd
 }
 
-func (m *Model) commitEditorField() {
-	if m.editor == nil || !m.fieldDraftDirty {
-		return
+func (m *Model) commitEditorField() bool {
+	if m.editor == nil {
+		return false
+	}
+	if !m.fieldDraftDirty {
+		return m.editor.Validation() == ""
 	}
 	if m.duplicateFlow && m.editorField == 7 {
 		m.duplicateTarget = m.fieldDraft
@@ -525,7 +577,11 @@ func (m *Model) commitEditorField() {
 	} else {
 		m.editor.SetFieldText(m.editorField, m.fieldDraft)
 	}
+	if m.editor.Validation() != "" {
+		return false
+	}
 	m.fieldDraftDirty = false
+	return true
 }
 
 func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
@@ -539,71 +595,199 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 	switch key.Type {
 	case tea.KeyEsc:
 		if m.editor.Dirty() || m.fieldDraftDirty {
-			m.prompt = &confirmation{kind: confirmDirtyNavigation, targetID: m.editor.Selection().RequestID}
+			m.prompt = &confirmation{kind: confirmDirtyNavigation}
 			return nil
 		}
 		m.discardEdits()
-	case tea.KeyTab, tea.KeyEnter:
-		m.commitEditorField()
+	case tea.KeyTab:
 		fieldCount := 7
 		if m.duplicateFlow {
 			fieldCount = 8
 		}
+		if !m.commitEditorField() {
+			return nil
+		}
 		m.editorField = (m.editorField + 1) % fieldCount
-		m.fieldDraft = m.editorFieldText()
+		m.fieldDraft = m.editor.FieldText(m.editorField)
+		if m.duplicateFlow && m.editorField == 7 {
+			m.fieldDraft = m.duplicateTarget
+		}
 		m.fieldDraftDirty = false
-		m.replaceField = true
-	case tea.KeyUp, tea.KeyDown:
-		m.commitEditorField()
-		if key.Type == tea.KeyUp {
+		m.fieldCursor = len([]rune(m.fieldDraft))
+		m.bodyScroll = 0
+		m.replaceField = m.editorField != 6
+	case tea.KeyCtrlUp, tea.KeyCtrlDown:
+		if !m.commitEditorField() {
+			return nil
+		}
+		if key.Type == tea.KeyCtrlUp {
 			m.requestNavigation(-1)
 		} else {
 			m.requestNavigation(1)
 		}
+	case tea.KeyUp, tea.KeyDown:
+		if m.editorField == 6 {
+			m.moveBodyCursorVertical(key.Type == tea.KeyDown)
+		} else {
+			if !m.commitEditorField() {
+				return nil
+			}
+			if key.Type == tea.KeyUp {
+				m.requestNavigation(-1)
+			} else {
+				m.requestNavigation(1)
+			}
+		}
+	case tea.KeyLeft:
+		m.fieldCursor = max(0, m.fieldCursor-1)
+		m.replaceField = false
+	case tea.KeyRight:
+		m.fieldCursor = min(len([]rune(m.fieldDraft)), m.fieldCursor+1)
+		m.replaceField = false
+	case tea.KeyHome:
+		if m.editorField == 6 {
+			m.moveBodyCursorLineEdge(false)
+		} else {
+			m.fieldCursor = 0
+		}
+		m.replaceField = false
+	case tea.KeyEnd:
+		if m.editorField == 6 {
+			m.moveBodyCursorLineEdge(true)
+		} else {
+			m.fieldCursor = len([]rune(m.fieldDraft))
+		}
+		m.replaceField = false
+	case tea.KeyDelete:
+		runes := []rune(m.fieldDraft)
+		if m.fieldCursor < len(runes) {
+			m.fieldDraft = string(runes[:m.fieldCursor]) + string(runes[m.fieldCursor+1:])
+			m.fieldDraftDirty = true
+		}
 	case tea.KeyCtrlS:
 		return m.Save()
 	case tea.KeyCtrlZ:
-		m.commitEditorField()
+		if !m.commitEditorField() {
+			return nil
+		}
 		m.editor.Undo()
 		m.fieldDraft = m.editor.FieldText(m.editorField)
+		m.fieldCursor = len([]rune(m.fieldDraft))
 	case tea.KeyCtrlY:
-		m.commitEditorField()
+		if !m.commitEditorField() {
+			return nil
+		}
 		m.editor.Redo()
 		m.fieldDraft = m.editor.FieldText(m.editorField)
+		m.fieldCursor = len([]rune(m.fieldDraft))
 	case tea.KeyCtrlB:
-		m.commitEditorField()
+		if !m.commitEditorField() {
+			return nil
+		}
 		mode := BodyModeRaw
 		if m.editor.mode == BodyModeRaw {
 			mode = BodyModeJSON
 		}
 		m.editor.SwitchBodyMode(mode)
 		m.fieldDraft = m.editor.FieldText(m.editorField)
+		m.fieldCursor = len([]rune(m.fieldDraft))
 		m.message = m.editor.Validation()
 	case tea.KeyCtrlP:
-		m.commitEditorField()
+		if !m.commitEditorField() {
+			return nil
+		}
 		m.prompt = &confirmation{kind: commandPalette}
 	case tea.KeyCtrlU:
 		m.fieldDraft = ""
+		m.fieldCursor = 0
 		m.fieldDraftDirty = true
 		m.replaceField = false
-	case tea.KeyBackspace:
-		value := []rune(m.editorFieldText())
-		if len(value) > 0 {
-			m.fieldDraft = string(value[:len(value)-1])
-			m.fieldDraftDirty = true
+	case tea.KeyEnter:
+		if m.editorField == 6 {
+			m.insertDraftText("\n")
+		} else {
+			if !m.commitEditorField() {
+				return nil
+			}
+			m.editorField = (m.editorField + 1) % 7
+			m.fieldDraft = m.editor.FieldText(m.editorField)
+			m.fieldCursor = len([]rune(m.fieldDraft))
+			m.replaceField = m.editorField != 6
 		}
+	case tea.KeyBackspace:
+		value := []rune(m.fieldDraft)
+		if m.replaceField {
+			m.fieldDraft = ""
+			m.fieldCursor = 0
+		} else if m.fieldCursor > 0 {
+			m.fieldDraft = string(value[:m.fieldCursor-1]) + string(value[m.fieldCursor:])
+			m.fieldCursor--
+		}
+		m.fieldDraftDirty = true
 		m.replaceField = false
 	case tea.KeyRunes:
-		text := string(key.Runes)
-		value := m.editorFieldText()
-		if m.replaceField {
-			value = ""
+		if string(key.Runes) == "?" {
+			m.help = true
+			return nil
 		}
-		m.fieldDraft = value + text
-		m.fieldDraftDirty = true
-		m.replaceField = false
+		m.insertDraftText(string(key.Runes))
 	}
 	return nil
+}
+
+func (m *Model) insertDraftText(text string) {
+	runes := []rune(m.fieldDraft)
+	if m.replaceField {
+		runes = nil
+		m.fieldCursor = 0
+	}
+	if m.fieldCursor < 0 {
+		m.fieldCursor = 0
+	}
+	if m.fieldCursor > len(runes) {
+		m.fieldCursor = len(runes)
+	}
+	insert := []rune(text)
+	m.fieldDraft = string(runes[:m.fieldCursor]) + string(insert) + string(runes[m.fieldCursor:])
+	m.fieldCursor += len(insert)
+	m.fieldDraftDirty = true
+	m.replaceField = false
+}
+func (m *Model) moveBodyCursorLineEdge(end bool) {
+	runes := []rune(m.fieldDraft)
+	cursor := min(max(m.fieldCursor, 0), len(runes))
+	start, finish := cursor, cursor
+	for start > 0 && runes[start-1] != '\n' {
+		start--
+	}
+	for finish < len(runes) && runes[finish] != '\n' {
+		finish++
+	}
+	if end {
+		m.fieldCursor = finish
+	} else {
+		m.fieldCursor = start
+	}
+}
+func (m *Model) moveBodyCursorVertical(down bool) {
+	lines := strings.Split(m.fieldDraft, "\n")
+	cursor := []rune(m.fieldDraft)[:min(m.fieldCursor, len([]rune(m.fieldDraft)))]
+	row := strings.Count(string(cursor), "\n")
+	col := len([]rune(string(cursor)[max(0, strings.LastIndex(string(cursor), "\n")+1):]))
+	target := row
+	if down {
+		target = min(len(lines)-1, row+1)
+	} else {
+		target = max(0, row-1)
+	}
+	if target == row {
+		return
+	}
+	offset := 0
+	for index := 0; index < target; index++ {
+		offset += len([]rune(lines[index])) + 1
+	}
+	m.fieldCursor = offset + min(col, len([]rune(lines[target])))
 }
 
 func (m Model) currentRequestIndex() int {
@@ -645,7 +829,8 @@ func (m *Model) handleRequestSaved(msg requestSavedMsg) tea.Cmd {
 	}
 	m.fieldDraft = m.editor.FieldText(m.editorField)
 	m.fieldDraftDirty = false
-	m.replaceField = true
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	m.replaceField = m.editorField != 6
 	m.message = "Saved " + msg.selection.RequestID
 	if m.duplicateFlow {
 		m.duplicateFlow, m.duplicateTarget = false, ""
@@ -653,7 +838,11 @@ func (m *Model) handleRequestSaved(msg requestSavedMsg) tea.Cmd {
 	if m.prompt != nil && m.prompt.kind == confirmDirtyNavigation && m.prompt.saving {
 		target := m.prompt.targetID
 		m.prompt = nil
-		m.beginEdit(target)
+		if target == "" {
+			m.discardEdits()
+		} else {
+			m.beginEdit(target)
+		}
 	}
 	return nil
 }
@@ -670,9 +859,16 @@ func (m *Model) handleDeleteFinished(msg deleteFinishedMsg) {
 		return
 	}
 	m.view = view
-	m.editor = nil
-	m.mode = browseMode
-	m.selectedID = ""
+	deletedEditor := false
+	if m.editor != nil && m.editor.Selection().Collection == msg.target.Collection {
+		id := m.editor.Selection().RequestID
+		deletedEditor = id == msg.target.RequestID || (msg.target.Group && strings.HasPrefix(id, strings.TrimSuffix(msg.target.RequestID, "/")+"/"))
+	}
+	if deletedEditor {
+		m.editor = nil
+		m.mode = browseMode
+		m.selectedID = ""
+	}
 	m.message = "Deleted " + msg.target.RequestID
 	m.clampTreeIndex()
 }
