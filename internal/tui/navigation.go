@@ -580,6 +580,8 @@ func (m *Model) beginEdit(id string) {
 	m.bodyScroll = 0
 	m.duplicateFlow, m.duplicateTarget = false, ""
 	m.draftUndo, m.draftRedo = nil, nil
+	m.jsonTextPresentation, m.jsonCursor = false, 0
+	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor = "", false, 0
 	if ok {
 		m.message = ""
 	}
@@ -609,7 +611,7 @@ func (m *Model) requestNavigation(direction int) {
 		}
 	}
 	target := wrap(index+direction, len(ids))
-	if m.editor.Dirty() {
+	if m.editor.Dirty() || m.fieldDraftDirty || m.jsonScalarDirty {
 		m.prompt = &confirmation{kind: confirmDirtyNavigation, targetID: ids[target]}
 		return
 	}
@@ -619,6 +621,7 @@ func (m *Model) requestNavigation(direction int) {
 func (m *Model) discardEdits() {
 	m.editor, m.prompt = nil, nil
 	m.duplicateFlow, m.duplicateTarget = false, ""
+	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor = "", false, 0
 	m.mode = browseMode
 	m.message = ""
 }
@@ -647,6 +650,9 @@ func (m *Model) commitEditorField() bool {
 	if m.editor == nil {
 		return false
 	}
+	if m.jsonScalarDirty && !m.commitJSONScalar() {
+		return false
+	}
 	if !m.fieldDraftDirty {
 		return m.editor.Validation() == ""
 	}
@@ -663,6 +669,7 @@ func (m *Model) commitEditorField() bool {
 		return false
 	}
 	m.fieldDraftDirty = false
+	m.draftUndo, m.draftRedo = nil, nil
 	return true
 }
 
@@ -676,18 +683,22 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 	}
 	structuredJSON := m.editorField == 6 && m.editor.mode == BodyModeJSON && !m.jsonTextPresentation
 	if structuredJSON && m.jsonScalarDirty && key.Type == tea.KeyUp {
-		m.commitJSONScalar()
+		if !m.commitJSONScalar() {
+			return nil
+		}
 		m.jsonCursor = max(0, m.jsonCursor-1)
 		return nil
 	}
 	if structuredJSON && m.jsonScalarDirty && key.Type == tea.KeyDown {
-		m.commitJSONScalar()
+		if !m.commitJSONScalar() {
+			return nil
+		}
 		m.jsonCursor++
 		return nil
 	}
 	switch key.Type {
 	case tea.KeyEsc:
-		if m.editor.Dirty() || m.fieldDraftDirty {
+		if m.editor.Dirty() || m.fieldDraftDirty || m.jsonScalarDirty {
 			m.prompt = &confirmation{kind: confirmDirtyNavigation}
 			return nil
 		}
@@ -742,31 +753,56 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 			}
 		}
 	case tea.KeyLeft:
-		m.fieldCursor = max(0, m.fieldCursor-1)
-		m.replaceField = false
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarCursor = max(0, m.jsonScalarCursor-1)
+		} else {
+			m.fieldCursor = max(0, m.fieldCursor-1)
+			m.replaceField = false
+		}
 	case tea.KeyRight:
-		m.fieldCursor = min(len([]rune(m.fieldDraft)), m.fieldCursor+1)
-		m.replaceField = false
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarCursor = min(len([]rune(m.jsonScalarDraft)), m.jsonScalarCursor+1)
+		} else {
+			m.fieldCursor = min(len([]rune(m.fieldDraft)), m.fieldCursor+1)
+			m.replaceField = false
+		}
 	case tea.KeyHome:
-		if m.editorField == 6 {
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarCursor = 0
+		} else if m.editorField == 6 {
 			m.moveBodyCursorLineEdge(false)
 		} else {
 			m.fieldCursor = 0
 		}
 		m.replaceField = false
 	case tea.KeyEnd:
-		if m.editorField == 6 {
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarCursor = len([]rune(m.jsonScalarDraft))
+		} else if m.editorField == 6 {
 			m.moveBodyCursorLineEdge(true)
 		} else {
 			m.fieldCursor = len([]rune(m.fieldDraft))
 		}
 		m.replaceField = false
 	case tea.KeyDelete:
-		runes := []rune(m.fieldDraft)
-		if m.fieldCursor < len(runes) {
-			m.pushFieldDraftUndo()
-			m.fieldDraft = string(runes[:m.fieldCursor]) + string(runes[m.fieldCursor+1:])
-			m.fieldDraftDirty = true
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			runes := []rune(m.jsonScalarDraft)
+			if m.jsonScalarCursor < len(runes) {
+				m.jsonScalarDraft = string(runes[:m.jsonScalarCursor]) + string(runes[m.jsonScalarCursor+1:])
+				m.jsonScalarDirty = true
+			}
+		} else {
+			runes := []rune(m.fieldDraft)
+			if m.fieldCursor < len(runes) {
+				m.pushFieldDraftUndo()
+				m.fieldDraft = string(runes[:m.fieldCursor]) + string(runes[m.fieldCursor+1:])
+				m.fieldDraftDirty = true
+			}
 		}
 	case tea.KeyCtrlS:
 		m.commitJSONScalar()
@@ -810,7 +846,9 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		m.message = m.editor.Validation()
 	case tea.KeyCtrlJ:
 		if m.editor.mode == BodyModeJSON {
-			m.commitJSONScalar()
+			if !m.commitJSONScalar() {
+				return nil
+			}
 			m.jsonTextPresentation = !m.jsonTextPresentation
 			m.jsonScalarDirty = false
 			m.message = ""
@@ -863,18 +901,28 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 			m.replaceField = m.editorField != 6
 		}
 	case tea.KeyBackspace:
-		value := []rune(m.fieldDraft)
-		if m.replaceField {
-			m.pushFieldDraftUndo()
-			m.fieldDraft = ""
-			m.fieldCursor = 0
-		} else if m.fieldCursor > 0 {
-			m.pushFieldDraftUndo()
-			m.fieldDraft = string(value[:m.fieldCursor-1]) + string(value[m.fieldCursor:])
-			m.fieldCursor--
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			value := []rune(m.jsonScalarDraft)
+			if m.jsonScalarCursor > 0 {
+				m.jsonScalarDraft = string(value[:m.jsonScalarCursor-1]) + string(value[m.jsonScalarCursor:])
+				m.jsonScalarCursor--
+				m.jsonScalarDirty = true
+			}
+		} else {
+			value := []rune(m.fieldDraft)
+			if m.replaceField {
+				m.pushFieldDraftUndo()
+				m.fieldDraft = ""
+				m.fieldCursor = 0
+			} else if m.fieldCursor > 0 {
+				m.pushFieldDraftUndo()
+				m.fieldDraft = string(value[:m.fieldCursor-1]) + string(value[m.fieldCursor:])
+				m.fieldCursor--
+			}
+			m.fieldDraftDirty = true
+			m.replaceField = false
 		}
-		m.fieldDraftDirty = true
-		m.replaceField = false
 	case tea.KeyRunes:
 		if string(key.Runes) == "?" && m.editorField < 0 {
 			m.help = true
@@ -882,7 +930,11 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		}
 		if structuredJSON {
 			m.ensureJSONScalarDraft()
-			m.jsonScalarDraft += string(key.Runes)
+			runes := []rune(m.jsonScalarDraft)
+			cursor := max(0, min(m.jsonScalarCursor, len(runes)))
+			insert := []rune(string(key.Runes))
+			m.jsonScalarDraft = string(runes[:cursor]) + string(insert) + string(runes[cursor:])
+			m.jsonScalarCursor += len(insert)
 			m.jsonScalarDirty = true
 		} else {
 			m.insertDraftText(string(key.Runes))
@@ -909,27 +961,30 @@ func (m *Model) ensureJSONScalarDraft() {
 	if text, ok := scalars[m.jsonCursor].value.(string); ok {
 		m.jsonScalarDraft = text
 	}
+	m.jsonScalarCursor = len([]rune(m.jsonScalarDraft))
 }
 
-func (m *Model) commitJSONScalar() {
+func (m *Model) commitJSONScalar() bool {
 	if !m.jsonScalarDirty || m.editor == nil {
-		return
+		return true
 	}
 	scalars, err := jsonScalars(m.editor.bodyText)
 	if err != nil || m.jsonCursor < 0 || m.jsonCursor >= len(scalars) {
 		m.editor.validation = "invalid JSON body: " + fmt.Sprint(err)
-		return
+		return false
 	}
 	text, err := setJSONScalar(m.editor.bodyText, scalars[m.jsonCursor].path, m.jsonScalarDraft)
 	if err != nil {
 		m.editor.validation = err.Error()
-		return
+		return false
 	}
 	m.editor.SetBodyText(text)
 	m.jsonScalarDirty = false
 	m.jsonScalarDraft = ""
+	m.jsonScalarCursor = 0
 	m.fieldDraft = m.editor.bodyText
 	m.editor.validation = ""
+	return true
 }
 
 func (m *Model) insertDraftText(text string) {

@@ -178,6 +178,81 @@ func TestStructuredJSONEditsNestedValues(t *testing.T) {
 	}
 }
 
+func TestPendingStructuredScalarDraftBlocksNavigation(t *testing.T) {
+	for _, action := range []string{"escape", "request-navigation"} {
+		t.Run(action, func(t *testing.T) {
+			m := editorWithJSON(t, `{"a":1}`)
+			m.editorField = 6
+			next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("9")})
+			m = next.(Model)
+			if action == "escape" {
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			} else {
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlDown})
+			}
+			m = next.(Model)
+			if m.prompt == nil || m.prompt.kind != confirmDirtyNavigation {
+				t.Fatal("pending scalar draft did not block navigation with a discard/save prompt")
+			}
+			if action == "request-navigation" {
+				target := m.prompt.targetID
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+				m = next.(Model)
+				if m.editor.Selection().RequestID != target || m.jsonScalarDirty || m.jsonScalarDraft != "" {
+					t.Fatalf("discard navigation carried scalar draft into request %q", m.editor.Selection().RequestID)
+				}
+			}
+		})
+	}
+}
+
+func TestStructuredScalarBackspaceEditsOnlySelectedValue(t *testing.T) {
+	m := editorWithJSON(t, `{"a":"old"}`)
+	m.editorField = 6
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("x")},
+		{Type: tea.KeyBackspace},
+		{Type: tea.KeyRunes, Runes: []rune("y")},
+		{Type: tea.KeyEnter},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	content := m.editor.Request().Request.Body.Content.(map[string]any)
+	if content["a"] != "oldy" {
+		t.Fatalf("structured scalar after append/backspace = %#v", content["a"])
+	}
+}
+
+func TestUndoAfterCommittingFieldRestoresTypedValue(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("N")},
+		{Type: tea.KeyRunes, Runes: []rune("ew")},
+		{Type: tea.KeyTab},
+		{Type: tea.KeyCtrlZ},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	if got := m.editor.Request().Name; got != "One" {
+		t.Fatalf("Ctrl+Z after Tab restored draft text but typed value is %q", got)
+	}
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatalf("save failed after undo: %s", m.editor.Validation())
+	}
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	saved, err := collection.LoadRequest(filepath.Join(m.view.Root, ".api", "requests", "one.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Name != "One" {
+		t.Fatalf("saved Name after undo = %q", saved.Name)
+	}
+}
+
 func TestJSONModePrettyPrintsAndRawModePreservesRawBytes(t *testing.T) {
 	m := editorWithJSON(t, `{"a":1}`)
 	if !strings.Contains(m.View(), "$.a: 1") || !strings.Contains(m.View(), "JSON structured") {

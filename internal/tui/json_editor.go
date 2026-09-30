@@ -33,11 +33,11 @@ func jsonScalars(text string) ([]jsonScalar, error) {
 			}
 			sort.Strings(keys)
 			for _, key := range keys {
-				walk(node[key], appendPath(path, key))
+				walk(node[key], appendPath(path, "."+key))
 			}
 		case []any:
 			for i, child := range node {
-				walk(child, appendPath(path, strconv.Itoa(i)))
+				walk(child, appendPath(path, "["+strconv.Itoa(i)+"]"))
 			}
 		default:
 			label := "$"
@@ -53,11 +53,7 @@ func jsonScalars(text string) ([]jsonScalar, error) {
 
 func appendPath(path []string, key string) []string {
 	result := append([]string(nil), path...)
-	if _, err := strconv.Atoi(key); err == nil {
-		result = append(result, "["+key+"]")
-	} else {
-		result = append(result, "."+key)
-	}
+	result = append(result, key)
 	return result
 }
 

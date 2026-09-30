@@ -599,7 +599,7 @@ func (m Model) structuredJSONLines() string {
 			value = strconv.Quote(scalar.value.(string))
 		}
 		if m.jsonScalarDirty && i == m.jsonCursor {
-			value = m.jsonScalarDraft
+			value = insertRuneMarker(m.jsonScalarDraft, m.jsonScalarCursor)
 		}
 		lines = append(lines, marker+scalar.label+": "+value)
 	}
