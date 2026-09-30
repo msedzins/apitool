@@ -8,7 +8,7 @@ Design the seven priority-1 areas identified in the API tool audit: request edit
 
 The current three-pane collection layout, Git-readable definitions, explicit Save, single-request execution and process-environment secret references remain the product constraints. Success is a developer being able to edit a request, understand validation, execute exactly the intended draft, inspect its result, and navigate safely using the keyboard.
 
-Open `index.html` to compare 21 states at 100×30 and 80×24. `screens/` contains 42 plain-text mockups; `states.json` records their explanations. No approved `testdata/` files or application code are changed.
+Open [gallery.md](gallery.md) to compare 21 states at 100×30 and 80×24. `screens/` contains 42 plain-text mockups; `states.json` records their explanations. No approved `testdata/` files or application code are changed.
 
 ## Approach
 
