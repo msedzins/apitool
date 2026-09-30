@@ -45,6 +45,12 @@ func statusColor(c int) lipgloss.Color {
 	return "10"
 }
 func (m Model) View() string {
+	if m.prompt != nil {
+		return m.confirmationView()
+	}
+	if m.mode == requestEditMode {
+		return m.editorDisplay()
+	}
 	var view string
 	if m.mode == collectionPickerMode {
 		view = m.collectionPickerView()
@@ -202,6 +208,7 @@ func (m Model) helpView(background string) string {
 		"│ Workspace   Ctrl+P collections                   │",
 		"│ Environment Ctrl+E select env                    │",
 		"│ Search      / find request                       │",
+		"│ Request     e edit selected request              │",
 		"│ Layout      Ctrl+←/→ resize split                │",
 		"│ Help        ? or Esc close                       │",
 		"│ Exit        Ctrl+C quit                          │",
@@ -232,6 +239,7 @@ func compactHelpView() string {
 		"Workspace   Ctrl+P collections",
 		"Environment Ctrl+E select env",
 		"Search      / find request",
+		"Request     e edit selected request",
 		"Layout      Ctrl+←/→ resize split",
 		"Help        ? or Esc close",
 		"Exit        Ctrl+C quit",

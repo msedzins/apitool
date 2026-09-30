@@ -35,6 +35,7 @@ const (
 	collectionPickerMode
 	environmentPickerMode
 	searchMode
+	requestEditMode
 )
 
 // Model is the application shell. It deliberately exposes only Bubble Tea's
@@ -59,6 +60,13 @@ type Model struct {
 	explorer                                     int
 	message                                      string
 	help                                         bool
+	editor                                       *RequestEditor
+	selectedID                                   string
+	editorField                                  int
+	replaceField                                 bool
+	prompt                                       *confirmation
+	duplicateFlow                                bool
+	duplicateTarget                              string
 }
 
 // New creates a shell around a workspace already opened by service.

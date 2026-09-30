@@ -15,11 +15,11 @@
 │                       │ Workspace   Ctrl+P collections                   │                       │
 │                       │ Environment Ctrl+E select env                    │                       │
 │                       │ Search      / find request                       │                       │
+│                       │ Request     e edit selected request              │                       │
 │                       │ Layout      Ctrl+←/→ resize split                │                       │
 │                       │ Help        ? or Esc close                       │                       │
 │                       │ Exit        Ctrl+C quit                          │                       │
 │                       └──────────────────────────────────────────────────┘                       │
-│                            │                                                                     │
 │                            │                                                                     │
 │                            │                                                                     │
 │                            │                                                                     │

@@ -376,6 +376,9 @@ func (s *Service) Delete(_ context.Context, collectionPath, id string, group, co
 		if err != nil {
 			return DeleteTarget{}, err
 		}
+		if err := s.refreshTree(collectionPath); err != nil {
+			return DeleteTarget{}, err
+		}
 	}
 	return result, nil
 }

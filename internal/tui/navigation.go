@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
+	"fmt"
 	"sort"
 	"strings"
 
+	"apitool/internal/app"
 	"apitool/internal/collection"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,6 +27,11 @@ type treeRow struct {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
+	case requestSavedMsg:
+		return m, m.handleRequestSaved(x)
+	case deleteFinishedMsg:
+		m.handleDeleteFinished(x)
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = x.Width, x.Height
 		if m.explorer > 0 {
@@ -39,6 +47,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help = false
 			}
 			return m, nil
+		}
+		if m.prompt != nil {
+			return m, m.handleConfirmation(x)
+		}
+		if m.mode == requestEditMode {
+			return m, m.handleEditorKey(x)
 		}
 		if x.Type == tea.KeyRunes && string(x.Runes) == "?" {
 			m.help = true
@@ -112,6 +126,13 @@ func (m *Model) savePreferences() {
 	}
 }
 func (m *Model) handleRune(s string) {
+	if s == "e" {
+		rows := m.visibleRows()
+		if m.treeIndex >= 0 && m.treeIndex < len(rows) && rows[m.treeIndex].kind == requestRow {
+			m.beginEdit(rows[m.treeIndex].id)
+		}
+		return
+	}
 	if s == "/" {
 		m.mode, m.query, m.treeIndex = searchMode, "", 0
 		return
@@ -430,4 +451,197 @@ func indexOf(xs []string, w string) int {
 		}
 	}
 	return 0
+}
+
+func (m *Model) beginEdit(id string) {
+	node, ok := m.view.Tree.Requests[id]
+	if !ok {
+		m.message = fmt.Sprintf("request %q not found", id)
+		return
+	}
+	m.selectedID = id
+	m.editor = newRequestEditor(m.service, app.Selection{Collection: m.collection, Environment: m.view.Environment, RequestID: id}, node.Request)
+	m.mode, m.editorField, m.replaceField = requestEditMode, 0, true
+	m.duplicateFlow, m.duplicateTarget = false, ""
+	m.message = ""
+}
+
+func (m *Model) requestNavigation(direction int) {
+	ids := m.view.Tree.RequestIDs
+	if len(ids) == 0 || m.editor == nil {
+		return
+	}
+	index := 0
+	for i, id := range ids {
+		if id == m.editor.Selection().RequestID {
+			index = i
+			break
+		}
+	}
+	target := wrap(index+direction, len(ids))
+	if m.editor.Dirty() {
+		m.prompt = &confirmation{kind: confirmDirtyNavigation, targetIndex: target}
+		return
+	}
+	m.beginEdit(ids[target])
+}
+
+func (m *Model) discardEdits() {
+	m.editor, m.prompt = nil, nil
+	m.duplicateFlow, m.duplicateTarget = false, ""
+	m.mode = browseMode
+	m.message = ""
+}
+
+func (m *Model) Save() tea.Cmd {
+	if m.editor == nil {
+		return nil
+	}
+	if m.duplicateFlow && (m.duplicateTarget == "" || m.requestIDExists(m.duplicateTarget)) {
+		m.message = "duplicate destination already exists or is empty"
+		return nil
+	}
+	cmd := m.editor.Save()
+	m.message = m.editor.Validation()
+	return cmd
+}
+
+func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
+	if m.editor == nil {
+		m.mode = browseMode
+		return nil
+	}
+	switch key.Type {
+	case tea.KeyEsc:
+		if m.editor.Dirty() {
+			m.prompt = &confirmation{kind: confirmDirtyNavigation, targetIndex: m.currentRequestIndex()}
+			return nil
+		}
+		m.discardEdits()
+	case tea.KeyTab, tea.KeyEnter:
+		fieldCount := 7
+		if m.duplicateFlow {
+			fieldCount = 8
+		}
+		m.editorField = (m.editorField + 1) % fieldCount
+		m.replaceField = true
+	case tea.KeyUp:
+		m.requestNavigation(-1)
+	case tea.KeyDown:
+		m.requestNavigation(1)
+	case tea.KeyCtrlS:
+		return m.Save()
+	case tea.KeyCtrlZ:
+		m.editor.Undo()
+	case tea.KeyCtrlY:
+		m.editor.Redo()
+	case tea.KeyCtrlB:
+		mode := BodyModeRaw
+		if m.editor.mode == BodyModeRaw {
+			mode = BodyModeJSON
+		}
+		m.editor.SwitchBodyMode(mode)
+		m.message = m.editor.Validation()
+	case tea.KeyCtrlP:
+		m.prompt = &confirmation{kind: commandPalette}
+	case tea.KeyCtrlU:
+		m.setEditorFieldText("")
+		m.replaceField = false
+	case tea.KeyBackspace:
+		value := []rune(m.editorFieldText())
+		if len(value) > 0 {
+			m.setEditorFieldText(string(value[:len(value)-1]))
+		}
+		m.replaceField = false
+	case tea.KeyRunes:
+		text := string(key.Runes)
+		value := m.editorFieldText()
+		if m.replaceField {
+			value = ""
+		}
+		m.setEditorFieldText(value + text)
+		m.replaceField = false
+	}
+	return nil
+}
+
+func (m Model) currentRequestIndex() int {
+	if m.editor == nil {
+		return m.treeIndex
+	}
+	for i, id := range m.view.Tree.RequestIDs {
+		if id == m.editor.Selection().RequestID {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m *Model) handleRequestSaved(msg requestSavedMsg) tea.Cmd {
+	if msg.err != nil {
+		m.message = msg.err.Error()
+		return nil
+	}
+	view, err := m.service.OpenCollection(context.Background(), msg.selection.Collection)
+	if err != nil {
+		m.message = err.Error()
+		return nil
+	}
+	m.view = view
+	m.selectedID = msg.selection.RequestID
+	if m.editor == nil {
+		m.beginEdit(msg.selection.RequestID)
+	} else {
+		m.editor.Load(msg.request)
+	}
+	m.editor.SetSelection(msg.selection)
+	m.message = "Saved " + msg.selection.RequestID
+	if m.duplicateFlow {
+		m.duplicateFlow, m.duplicateTarget = false, ""
+	}
+	if m.prompt != nil && m.prompt.kind == confirmDirtyNavigation && m.prompt.saving {
+		target := m.prompt.targetIndex
+		m.prompt = nil
+		ids := m.view.Tree.RequestIDs
+		if target >= 0 && target < len(ids) {
+			m.beginEdit(ids[target])
+		}
+	}
+	return nil
+}
+
+func (m *Model) handleDeleteFinished(msg deleteFinishedMsg) {
+	if msg.err != nil {
+		m.message = msg.err.Error()
+		return
+	}
+	view, err := m.service.OpenCollection(context.Background(), msg.target.Collection)
+	if err != nil {
+		m.message = err.Error()
+		return
+	}
+	m.view = view
+	m.editor = nil
+	m.mode = browseMode
+	m.selectedID = ""
+	m.message = "Deleted " + msg.target.RequestID
+	m.clampTreeIndex()
+}
+
+func (m *Model) editorFieldText() string {
+	if m.duplicateFlow && m.editorField == 7 {
+		return m.duplicateTarget
+	}
+	return m.editor.FieldText(m.editorField)
+}
+
+func (m *Model) setEditorFieldText(value string) {
+	if m.duplicateFlow && m.editorField == 7 {
+		m.duplicateTarget = value
+		selection := m.editor.Selection()
+		selection.RequestID = value
+		m.editor.SetSelection(selection)
+		return
+	}
+	m.editor.SetFieldText(m.editorField, value)
 }
