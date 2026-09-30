@@ -236,6 +236,15 @@ func TestDuplicateAndDeleteExposeDistinctPathsBeforeMutation(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "payments/.api/requests/copies")); !os.IsNotExist(err) {
 		t.Fatalf("group still exists: %v", err)
 	}
+	view, err := service.OpenCollection(context.Background(), "payments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range view.Tree.Groups {
+		if group.ID == "copies" {
+			t.Fatal("deleted group remains in application tree")
+		}
+	}
 }
 
 func TestDeleteRejectsSymlinkedGroupWithoutTouchingExternalFiles(t *testing.T) {
