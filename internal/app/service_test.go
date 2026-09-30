@@ -395,3 +395,147 @@ func realGitWorkspace(t *testing.T) string {
 	write("workspace.txt", "workspace change\n")
 	return root
 }
+
+func TestSaveAndDuplicateRejectSymlinkedRequestDirectory(t *testing.T) {
+	root := requestWorkspace(t, "http://127.0.0.1:1")
+	external := t.TempDir()
+	sentinel := filepath.Join(external, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "payments/.api/requests/linked")
+	if err := os.Symlink(external, link); err != nil {
+		t.Fatal(err)
+	}
+	service, _ := app.New(app.Dependencies{})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	request := model.Request{Name: "New", Method: "GET", Request: model.RequestConfig{URL: "https://api.example.test/new"}}
+	if err := service.SaveRequest(context.Background(), app.Selection{Collection: "payments", RequestID: "linked/save"}, request); err == nil {
+		t.Fatal("SaveRequest accepted a symlinked request directory")
+	}
+	if _, err := service.DuplicateRequest(context.Background(), app.Selection{Collection: "payments", RequestID: "check"}, "linked/copy"); err == nil {
+		t.Fatal("DuplicateRequest accepted a symlinked request directory")
+	}
+	entries, err := os.ReadDir(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "sentinel.txt" {
+		t.Fatalf("external directory changed: %#v", entries)
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil || string(data) != "keep" {
+		t.Fatalf("sentinel changed: %q, %v", data, err)
+	}
+}
+
+func TestSendRejectsInvalidAncestorGroup(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		group    string
+		envName  string
+		envValue string
+	}{
+		{name: "malformed YAML", group: "auth: [not-a-mapping\n"},
+		{name: "unsupported inherited auth", group: "auth:\n  type: oauth2\n  grant: authorization_code\n  token_url: https://auth.example.test/token\n  client_id: client\n  client_secret: ${API_CLIENT_SECRET}\n"},
+		{name: "invalid resolved inherited auth", group: "auth:\n  type: oauth2\n  grant: client_credentials\n  token_url: ${EMPTY_TOKEN_URL}\n  client_id: client\n  client_secret: ${API_CLIENT_SECRET}\n", envName: "EMPTY_TOKEN_URL", envValue: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.envName != "" {
+				t.Setenv(test.envName, test.envValue)
+				t.Setenv("API_CLIENT_SECRET", "resolved-top-secret")
+			}
+			root := requestWorkspace(t, "http://api.example.test/admin")
+			groupPath := filepath.Join(root, "payments/.api/requests/admin/_group.yaml")
+			if err := os.MkdirAll(filepath.Dir(groupPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(groupPath, []byte(test.group), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			requestPath := filepath.Join(root, "payments/.api/requests/admin/list.yaml")
+			if err := os.WriteFile(requestPath, []byte("name: List admin\nmethod: GET\nrequest:\n  url: http://api.example.test/admin\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			tokenProvider := &recordingTokenProvider{}
+			executeCalls := 0
+			service, _ := app.New(app.Dependencies{
+				TokenProvider: tokenProvider,
+				Execute: func(ctx context.Context, effective model.EffectiveRequest, provider auth.TokenProvider) (model.Response, *model.ExecutionError) {
+					executeCalls++
+					if effective.Auth != nil && !effective.Auth.None {
+						_, _ = provider.Token(ctx, *effective.Auth)
+					}
+					return model.Response{StatusCode: http.StatusOK}, nil
+				},
+			})
+			if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			result := service.Send(context.Background(), app.Selection{Collection: "payments", Environment: "test", RequestID: "admin/list"})
+			if executeCalls != 0 || tokenProvider.calls != 0 {
+				t.Fatalf("invalid ancestor executed: execute calls=%d, token calls=%d", executeCalls, tokenProvider.calls)
+			}
+			if result.ExecutionError == nil || len(result.Diagnostics) == 0 {
+				t.Fatalf("invalid ancestor result = %#v, want safe diagnostics and request error", result)
+			}
+			if test.envName != "" && !hasAppDiagnostic(result.Diagnostics, "auth_token_url_required") {
+				t.Fatalf("resolved-auth diagnostics = %#v, want missing effective token URL", result.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestSendReportsRuntimePersistenceFailures(t *testing.T) {
+	root := requestWorkspace(t, "http://api.example.test")
+	service, _ := app.New(app.Dependencies{Execute: func(context.Context, model.EffectiveRequest, auth.TokenProvider) (model.Response, *model.ExecutionError) {
+		return model.Response{StatusCode: http.StatusOK}, nil
+	}})
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeDir := filepath.Join(root, ".apitool")
+	if err := os.RemoveAll(filepath.Join(runtimeDir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "logs"), []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(runtimeDir, "history.jsonl"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "responses"), []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := service.Send(context.Background(), app.Selection{Collection: "payments", Environment: "test", RequestID: "check"})
+	if result.Response == nil || result.Response.StatusCode != http.StatusOK || result.ExecutionError != nil {
+		t.Fatalf("persistence failure changed completed response: %#v", result)
+	}
+	for _, code := range []string{"runtime_log_write", "runtime_history_write", "runtime_cache_write"} {
+		if !hasAppDiagnostic(result.Diagnostics, code) {
+			t.Fatalf("diagnostics = %#v, want %s", result.Diagnostics, code)
+		}
+	}
+}
+
+type recordingTokenProvider struct{ calls int }
+
+func (p *recordingTokenProvider) Token(context.Context, model.Auth) (auth.Token, error) {
+	p.calls++
+	return auth.Token{AccessToken: "test-token", TokenType: "Bearer"}, nil
+}
+
+func hasAppDiagnostic(diagnostics []model.Diagnostic, code string) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
+}

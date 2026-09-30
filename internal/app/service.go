@@ -262,27 +262,10 @@ func (s *Service) SaveRequest(_ context.Context, selection Selection, request mo
 	if err != nil {
 		return err
 	}
-	path, err := requestPath(view.Root, selection.RequestID)
-	if err != nil {
+	if _, err := requestPath(view.Root, selection.RequestID); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create request directory: %w", err)
-	}
-	if selection.CreateOnly {
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			return err
-		}
-		if err := file.Close(); err != nil {
-			_ = os.Remove(path)
-			return err
-		}
-		if err := collection.SaveRequest(path, request); err != nil {
-			_ = os.Remove(path)
-			return err
-		}
-	} else if err := collection.SaveRequest(path, request); err != nil {
+	if err := collection.SaveRequestInCollection(view.Root, selection.RequestID, request, selection.CreateOnly); err != nil {
 		return err
 	}
 	return s.refreshTree(selection.Collection)
@@ -304,6 +287,9 @@ func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
 	if !ok {
 		return executionResult(fmt.Errorf("request %q not found", selection.RequestID))
 	}
+	if hasErrors(node.Diagnostics) {
+		return SendResult{Diagnostics: append([]model.Diagnostic(nil), node.Diagnostics...), ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Request definition or inherited configuration is invalid"}}
+	}
 	if diagnostics := validate.Definition(node.Request); len(diagnostics) != 0 {
 		return SendResult{Diagnostics: diagnostics, ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Request definition is invalid"}}
 	}
@@ -321,13 +307,20 @@ func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
 	response, execErr := s.deps.Execute(ctx, effective, s.deps.TokenProvider)
 	key := runtime.Key{CollectionPath: selection.Collection, Environment: selection.Environment, RequestID: selection.RequestID}
 	log := executionLog(key, effective, response, execErr)
-	_ = s.store.AppendLog(log)
-	_ = s.store.AppendHistory(key, effective.Method, response, execErr)
-	if execErr == nil {
-		_ = s.store.SaveResponse(key, response)
-		return SendResult{Response: &response, Logs: []runtime.LogEntry{log}}
+	var storageDiagnostics []model.Diagnostic
+	if err := s.store.AppendLog(log); err != nil {
+		storageDiagnostics = append(storageDiagnostics, storageDiagnostic("runtime_log_write", ".apitool/logs/executions.jsonl", "could not write execution log"))
 	}
-	return SendResult{ExecutionError: execErr, Logs: []runtime.LogEntry{log}}
+	if err := s.store.AppendHistory(key, effective.Method, response, execErr); err != nil {
+		storageDiagnostics = append(storageDiagnostics, storageDiagnostic("runtime_history_write", ".apitool/history.jsonl", "could not write request history"))
+	}
+	if execErr == nil {
+		if err := s.store.SaveResponse(key, response); err != nil {
+			storageDiagnostics = append(storageDiagnostics, storageDiagnostic("runtime_cache_write", ".apitool/responses", "could not save response cache"))
+		}
+		return SendResult{Response: &response, Diagnostics: storageDiagnostics, Logs: []runtime.LogEntry{log}}
+	}
+	return SendResult{ExecutionError: execErr, Diagnostics: storageDiagnostics, Logs: []runtime.LogEntry{log}}
 }
 
 func (s *Service) DuplicateRequest(ctx context.Context, source Selection, destinationID string) (Selection, error) {
@@ -348,7 +341,7 @@ func (s *Service) DuplicateRequest(ctx context.Context, source Selection, destin
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Selection{}, err
 	}
-	if err := s.SaveRequest(ctx, Selection{Collection: source.Collection, RequestID: destinationID}, node.Request); err != nil {
+	if err := s.SaveRequest(ctx, Selection{Collection: source.Collection, RequestID: destinationID, CreateOnly: true}, node.Request); err != nil {
 		return Selection{}, err
 	}
 	return Selection{Collection: source.Collection, Environment: source.Environment, RequestID: destinationID}, nil
@@ -467,6 +460,9 @@ func hasErrors(diags []model.Diagnostic) bool {
 		}
 	}
 	return false
+}
+func storageDiagnostic(code, path, message string) model.Diagnostic {
+	return model.Diagnostic{Code: code, Path: path, Message: message, Severity: model.SeverityWarning}
 }
 func executionResult(err error) SendResult {
 	return SendResult{ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: err.Error()}}

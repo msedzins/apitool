@@ -2,7 +2,10 @@
 package collection
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -121,6 +124,32 @@ func validateAuthSource(path string, auth *model.Auth) error {
 // SaveRequest writes request to path atomically. Client secrets must remain
 // process environment references, never literal values.
 func SaveRequest(path string, request model.Request) error {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open request directory: %w", err)
+	}
+	defer root.Close()
+	return saveRequestAt(root, filepath.Base(path), request, false)
+}
+
+// SaveRequestInCollection saves a request below the collection's .api/requests
+// directory. The rooted operations prevent symlink races from redirecting a
+// request write outside the collection. createOnly uses an atomic hard link so
+// a duplicate never replaces an existing definition.
+func SaveRequestInCollection(collectionRoot, requestID string, request model.Request, createOnly bool) error {
+	clean := filepath.Clean(filepath.FromSlash(requestID))
+	if requestID == "" || filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.Contains(requestID, `\`) {
+		return fmt.Errorf("invalid request ID")
+	}
+	root, err := os.OpenRoot(collectionRoot)
+	if err != nil {
+		return fmt.Errorf("open collection root: %w", err)
+	}
+	defer root.Close()
+	return saveRequestAt(root, filepath.Join(".api", "requests", clean+".yaml"), request, createOnly)
+}
+
+func saveRequestAt(root *os.Root, relativePath string, request model.Request, createOnly bool) error {
 	if err := rejectLiteralSecret(request.Auth); err != nil {
 		return err
 	}
@@ -142,7 +171,7 @@ func SaveRequest(path string, request model.Request) error {
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	return writeAtomic(path, data)
+	return writeRootedAtomic(root, relativePath, data, createOnly)
 }
 
 type requestDocument struct {
@@ -488,37 +517,51 @@ func validateHTTPConfig(config *model.HTTPConfig) error {
 	return nil
 }
 
-func writeAtomic(path string, data []byte) error {
+func writeRootedAtomic(root *os.Root, path string, data []byte, createOnly bool) error {
 	directory := filepath.Dir(path)
-	info, err := os.Stat(path)
+	if err := root.MkdirAll(directory, 0o755); err != nil {
+		return fmt.Errorf("create request directory: %w", err)
+	}
 	mode := os.FileMode(0o644)
+	info, err := root.Lstat(path)
 	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("request destination must not be a symlink")
+		}
 		mode = info.Mode().Perm()
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 
-	temporary, err := os.CreateTemp(directory, ".apitool-*.yaml")
+	var nonce [12]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return fmt.Errorf("create request temp name: %w", err)
+	}
+	temporaryPath := filepath.Join(directory, ".apitool-"+hex.EncodeToString(nonce[:])+".tmp")
+	temporary, err := root.OpenFile(temporaryPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
-		return err
+		return fmt.Errorf("create request temp file: %w", err)
 	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-
-	if err := temporary.Chmod(mode); err != nil {
-		temporary.Close()
-		return err
-	}
+	defer root.Remove(temporaryPath)
 	if _, err := temporary.Write(data); err != nil {
 		temporary.Close()
-		return err
+		return fmt.Errorf("write request: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
 		temporary.Close()
-		return err
+		return fmt.Errorf("sync request: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
-		return err
+		return fmt.Errorf("close request: %w", err)
 	}
-	return os.Rename(temporaryPath, path)
+	if createOnly {
+		if err := root.Link(temporaryPath, path); err != nil {
+			return fmt.Errorf("create request without replacing existing file: %w", err)
+		}
+		return nil
+	}
+	if err := root.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace request: %w", err)
+	}
+	return nil
 }
