@@ -29,7 +29,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-002](#task-2-status) | Implemented | Discovery and inherited diagnostics reviewed; execution enforcement is tracked in Task 6. |
 | [T-003](#task-3-status) | Implemented | Validate effective inherited auth before execution. |
 | [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
-| [T-005](#task-5-status) | In progress | Prevent collisions between nested cache identities. |
+| [T-005](#task-5-status) | Implemented | Prevent collisions between nested cache identities. |
 | [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
 | [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
 | [T-008](#task-8-status) | Needs corrections | Fix editor focus and mode-aware mouse routing. |
@@ -410,7 +410,7 @@ git commit -m "feat: execute OAuth client-credentials requests"
 <a id="task-5-status"></a>
 ### Task 5: Local runtime state, cache, history, and redacted execution log
 
-**Status:** In progress
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/runtime/store.go`
@@ -488,7 +488,7 @@ Files: `internal/runtime/store.go`, `internal/runtime/store_test.go`.
 - [x] Run `go test ./internal/runtime -run TestResponseCacheSeparatesNestedIdentityBoundaries`; confirm FAIL before the correction.
 - [x] Encode collection, environment and request identities with unambiguous boundaries while preserving traversal/symlink protections and identity checks. Read legacy cache only when its stored identity matches exactly; new writes use the collision-free layout.
 - [x] Extend the regression to verify a matching legacy cache is readable and a mismatched legacy identity is never returned; run `go test ./internal/runtime`; require PASS.
-- [ ] Review and commit; update the runtime-layout documentation to match the verified cache layout.
+- [x] Review and commit; update the runtime-layout documentation to match the verified cache layout.
 
 
 <a id="task-6-status"></a>
