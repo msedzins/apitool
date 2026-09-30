@@ -27,10 +27,10 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 |---|---|---|
 | [T-001](#task-1-status) | Implemented | Reject unsupported collection/group authentication. |
 | [T-002](#task-2-status) | Implemented | Discovery and inherited diagnostics reviewed; execution enforcement is tracked in Task 6. |
-| [T-003](#task-3-status) | In progress | Validate effective inherited auth before execution. |
+| [T-003](#task-3-status) | Implemented | Validate effective inherited auth before execution. |
 | [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
 | [T-005](#task-5-status) | Needs corrections | Prevent collisions between nested cache identities. |
-| [T-006](#task-6-status) | Needs corrections | Protect request writes; block invalid ancestors; surface storage failures. |
+| [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
 | [T-007](#task-7-status) | Needs corrections | Redact multiline credentials from Git diffs. |
 | [T-008](#task-8-status) | Needs corrections | Fix editor focus and mode-aware mouse routing. |
 | [T-009](#task-9-status) | Needs corrections | Add structured JSON editing; fix literal input and invalid-draft undo. |
@@ -270,7 +270,7 @@ git commit -m "feat: discover collections and request trees"
 <a id="task-3-status"></a>
 ### Task 3: Resolve environments, inheritance, and effective configuration
 
-**Status:** In progress
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/resolve/effective.go`
@@ -338,7 +338,7 @@ Files: `internal/resolve/effective.go`, `internal/resolve/effective_test.go`.
 - [x] Run `go test ./internal/resolve -run TestEffectiveRejectsUnsupportedInheritedAuth`; confirm FAIL before the correction.
 - [x] Validate selected effective auth structurally and after resolution. Use resolved-value validation that permits a resolved secret in memory, rather than applying the definition-only secret-reference rule to it. Preserve nearest-setting precedence.
 - [x] Run `go test ./internal/resolve ./internal/validate`; require PASS. Task 6 must refuse execution when these diagnostics are returned.
-- [ ] Review and commit the correction before marking this task Implemented.
+- [x] Review and commit the correction before marking this task Implemented.
 
 
 <a id="task-4-status"></a>
@@ -494,7 +494,7 @@ Files: `internal/runtime/store.go`, `internal/runtime/store_test.go`.
 <a id="task-6-status"></a>
 ### Task 6: Application service and CLI startup modes
 
-**Status:** Needs corrections
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/app/service.go`
@@ -551,13 +551,13 @@ git commit -m "feat: add application service and CLI options"
 
 Files: `internal/app/service.go`, `internal/app/service_test.go`, `internal/collection/yaml_store.go`, `internal/collection/yaml_store_test.go`.
 
-- [ ] Write `TestSaveAndDuplicateRejectSymlinkedRequestDirectory`: point a request-directory symlink at an external temporary directory; assert Save and Duplicate fail and do not create or modify external files. Run `go test ./internal/app -run TestSaveAndDuplicateRejectSymlinkedRequestDirectory`; confirm FAIL.
-- [ ] Protect all request-write ancestors and final destinations with descriptor-relative or equivalently race-resistant containment checks. Preserve atomic Save and create-only duplicate collision behavior; do not rely solely on a path check followed by an unchecked write.
-- [ ] Write `TestSendRejectsInvalidAncestorGroup`: malformed group YAML and unsupported inherited group auth must return safe diagnostics and call neither OAuth nor HTTP execution. Run `go test ./internal/app -run TestSendRejectsInvalidAncestorGroup`; confirm FAIL.
-- [ ] Refuse execution when the selected request carries inherited load/validation diagnostics; preserve valid siblings and explicit authentication inheritance.
-- [ ] Write `TestSendReportsRuntimePersistenceFailures`: independently force log/history/cache writes to fail; assert the completed HTTP response is preserved and safe storage diagnostics identify each failed persistence operation. Run `go test ./internal/app -run TestSendReportsRuntimePersistenceFailures`; confirm FAIL.
-- [ ] Add storage diagnostics to the send result without recasting a completed HTTP exchange as transport failure; retain all independent persistence errors. Task 10 renders these diagnostics.
-- [ ] Run `go test ./internal/app ./internal/collection ./internal/runtime`; require PASS, then review and commit each independently verifiable correction.
+- [x] Write `TestSaveAndDuplicateRejectSymlinkedRequestDirectory`: point a request-directory symlink at an external temporary directory; assert Save and Duplicate fail and do not create or modify external files. Run `go test ./internal/app -run TestSaveAndDuplicateRejectSymlinkedRequestDirectory`; confirm FAIL.
+- [x] Protect all request-write ancestors and final destinations with descriptor-relative or equivalently race-resistant containment checks. Preserve atomic Save and create-only duplicate collision behavior; do not rely solely on a path check followed by an unchecked write.
+- [x] Write `TestSendRejectsInvalidAncestorGroup`: malformed group YAML and unsupported inherited group auth must return safe diagnostics and call neither OAuth nor HTTP execution. Run `go test ./internal/app -run TestSendRejectsInvalidAncestorGroup`; confirm FAIL.
+- [x] Refuse execution when the selected request carries inherited load/validation diagnostics; preserve valid siblings and explicit authentication inheritance.
+- [x] Write `TestSendReportsRuntimePersistenceFailures`: independently force log/history/cache writes to fail; assert the completed HTTP response is preserved and safe storage diagnostics identify each failed persistence operation. Run `go test ./internal/app -run TestSendReportsRuntimePersistenceFailures`; confirm FAIL.
+- [x] Add storage diagnostics to the send result without recasting a completed HTTP exchange as transport failure; retain all independent persistence errors. Task 10 renders these diagnostics.
+- [x] Run `go test ./internal/app ./internal/collection ./internal/runtime`; require PASS, then review and commit each independently verifiable correction.
 
 
 <a id="task-7-status"></a>
