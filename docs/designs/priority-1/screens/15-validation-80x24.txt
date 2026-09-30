@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  [Save] * Unsaved                                 │
+│▾ payments          │Params | Headers | [Auth] | Body | Settings              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Auth: Inherit | None | [OAuth2]                          │
+│  > POST create     │Client secret: ${PAYMENTS_CLIENT_SECRET}                 │
+│    ! broken        │! Process variable is unavailable                        │
+│                    │                                                         │
+│▸ users             │                                                         │
+│                    │                                                         │
+│                    ├─────────────────────────────────────────────────────────┤
+│                    │[Diagnostics] Response Request Log                       │
+│                    │Stage: resolution | missing_process_variable             │
+│                    │payments/create.yaml > auth.client_secret                │
+│                    │Set PAYMENTS_CLIENT_SECRET before starting apitool.      │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

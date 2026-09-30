@@ -1,0 +1,30 @@
+┌─────────────────────────┬────────────────────────────────────────────────────────────────────────┐
+│Collections / tree       │▶ Invalid: payments/broken.yaml                                         │
+│                         │[Send disabled]  Saved                                                  │
+│▾ payments               │Params | Headers | Auth | [Body] | Settings                             │
+│  ▾ payments             ├────────────────────────────────────────────────────────────────────────┤
+│    GET list             │Selected: payments/broken.yaml                                          │
+│    POST create          │! Definition cannot be loaded                                           │
+│  > ! broken             │Request controls unavailable                                            │
+│                         │                                                                        │
+│▸ users                  │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         ├────────────────────────────────────────────────────────────────────────┤
+│                         │[Diagnostics] Response Request Log                                      │
+│                         │Stage: load | invalid_yaml                                              │
+│                         │payments/broken.yaml: line 4                                            │
+│                         │Repair this file externally, then [Reload].                             │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+├─────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│Collection: payments     │Environment: test | Git: design preview                                 │
+│? Help                   │Tab panes | Ctrl+S save | Ctrl+Enter send                               │
+└─────────────────────────┴────────────────────────────────────────────────────────────────────────┘

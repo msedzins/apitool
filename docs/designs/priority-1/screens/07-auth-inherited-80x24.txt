@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  [Save] * Unsaved                                 │
+│▾ payments          │Params | Headers | [Auth] | Body | Settings              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Auth: [Inherit] | None | OAuth2                          │
+│  > POST create     │Effective source: collection Payments API                │
+│    ! broken        │Grant: client_credentials                                │
+│                    │Endpoint: {{oauth_token_url}}                            │
+│▸ users             │Scopes: payments.write                                   │
+│                    │Token: ********  expires in 24m  [Show token]            │
+│                    ├─────────────────────────────────────────────────────────┤
+│                    │No response yet.                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

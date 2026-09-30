@@ -1,0 +1,30 @@
+┌─────────────────────────┬────────────────────────────────────────────────────────────────────────┐
+│Collections / tree       │▶ POST | {{base_url}}/payments                                          │
+│                         │[Send]  Saved                                                           │
+│▾ payments               │Params | [Headers] | Auth | Body | Settings                             │
+│  ▾ payments             ├────────────────────────────────────────────────────────────────────────┤
+│    GET list             │Name: Create payment                                                    │
+│  > POST create          │Accept: application/json                                                │
+│    ! broken             │                                                                        │
+│                         │                                                                        │
+│▸ users                  │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         ├────────────────────────────────────────────────────────────────────────┤
+│                         │401 Unauthorized | 92ms | 36 B | test | Live                            │
+│                         │[Body] Headers | Pretty JSON / Raw                                      │
+│                         │{ "error": "insufficient_scope" }                                       │
+│                         │HTTP exchange completed. Inspect body and auth.                         │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+├─────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│Collection: payments     │Environment: test | Git: design preview                                 │
+│? Help                   │Tab panes | Ctrl+S save | Ctrl+Enter send                               │
+└─────────────────────────┴────────────────────────────────────────────────────────────────────────┘
