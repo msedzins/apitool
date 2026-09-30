@@ -65,6 +65,14 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [WF-001 — Complete the local multi-collection workflow](#wf-001) | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | planned |
 | [OPS-001 — Enforce the CI quality gate](#ops-001) | OPS | CI | R-016 | T-013 | planned |
 
+| [CFG-007 — Retain a draft when save-and-continue fails](#cfg-007) | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
+| [UI-020 — Display cancellation as an execution diagnostic](#ui-020) | UI | TUI, API/Protocol (HTTP) | R-009 | T-004, T-006, T-010 | planned |
+| [UI-021 — Distinguish response-storage failure from HTTP failure](#ui-021) | UI | TUI, Filesystem/Git | R-009, R-010 | T-005, T-006, T-010 | planned |
+
+## Priority 1 screen references
+
+Proposed screen links appear within the relevant scenarios below. They refine verification of the mapped requirements; they do not replace approved baselines or prove implementation. All priority-1 layouts are pending visual approval at 100×30 and 80×24. The [design gallery](../designs/priority-1/gallery.md) owns the interaction rules and mockups; this suite owns scenario IDs and requirement/task traceability.
+
 ## Workspace navigation
 
 <a id="ui-001"></a>
@@ -134,6 +142,8 @@ The malformed request remains visible with a warning. Selecting it presents its 
 
 **Acceptance fixture:** [examples/workspace](../../examples/workspace/)
 
+Priority-1 screen proposals: [18](../designs/priority-1/gallery.md#18-invalid-definition).
+
 <a id="ui-003"></a>
 ## UI-003 — Render nested request groups
 
@@ -183,6 +193,8 @@ The request is reachable without a mouse, and text identifies the server-error s
 ### Notes
 
 Vim bindings are optional.
+
+Priority-1 screen proposals: [11](../designs/priority-1/gallery.md#11-response), [12](../designs/priority-1/gallery.md#12-http-error).
 
 <a id="ui-015"></a>
 ## UI-015 — Open keyboard help from any TUI mode
@@ -346,6 +358,8 @@ The saved YAML definition reflects the edit and is visible as a definition chang
 
 Methods are normalized to uppercase.
 
+Priority-1 screen proposals: [01](../designs/priority-1/gallery.md#01-params), [02](../designs/priority-1/gallery.md#02-headers), [06](../designs/priority-1/gallery.md#06-settings).
+
 <a id="cfg-002"></a>
 ## CFG-002 — Block invalid configuration
 
@@ -371,6 +385,8 @@ The action is blocked with actionable validation feedback and the persisted defi
 
 Validation details must not expose secrets.
 
+Priority-1 screen proposals: [04](../designs/priority-1/gallery.md#04-json-invalid), [15](../designs/priority-1/gallery.md#15-validation).
+
 <a id="cfg-003"></a>
 ## CFG-003 — Block literal client secrets
 
@@ -395,6 +411,8 @@ Saving is blocked and the literal secret is absent from the YAML definition and 
 ### Notes
 
 Process-environment references remain the permitted representation.
+
+Priority-1 screen proposals: [08](../designs/priority-1/gallery.md#08-auth-override).
 
 <a id="cfg-004"></a>
 ## CFG-004 — Restore a collection environment
@@ -523,6 +541,8 @@ Sending is blocked and the diagnostic identifies the variable and field location
 
 No request-local, response-derived, implicit-fallback, or recursive cross-environment lookup is used.
 
+Priority-1 screen proposals: [15](../designs/priority-1/gallery.md#15-validation).
+
 <a id="api-003"></a>
 ## API-003 — Use nearest inherited authentication
 
@@ -548,6 +568,8 @@ The endpoint receives authorization derived from the nearest defined authenticat
 
 Auth inheritance follows collection, ancestor groups, nearest group, then request.
 
+Priority-1 screen proposals: [07](../designs/priority-1/gallery.md#07-auth-inherited), [08](../designs/priority-1/gallery.md#08-auth-override).
+
 <a id="api-004"></a>
 ## API-004 — Disable inherited authentication
 
@@ -572,6 +594,8 @@ The endpoint receives no Authorization header.
 ### Notes
 
 Omitting auth has different inheritance behavior.
+
+Priority-1 screen proposals: [08](../designs/priority-1/gallery.md#08-auth-override).
 
 <a id="api-005"></a>
 ## API-005 — Request OAuth scopes
@@ -648,6 +672,9 @@ The diagnostic shows the OAuth error code without showing the client secret, acc
 
 Opaque tokens remain supported.
 
+Priority-1 screen proposals: [17](../designs/priority-1/gallery.md#17-log).
+
+
 ## Editing and execution
 
 <a id="ui-005"></a>
@@ -675,6 +702,8 @@ The TUI offers Save and continue, Discard changes, and Cancel without autosaving
 
 Discard and Cancel leave the persisted definition unchanged.
 
+Priority-1 screen proposals: [19](../designs/priority-1/gallery.md#19-dirty-navigation), [20](../designs/priority-1/gallery.md#20-save-failure).
+
 <a id="ui-006"></a>
 ## UI-006 — Limit undo and redo to one request
 
@@ -700,6 +729,8 @@ Only edits made during the second request's editing session can be undone or red
 
 Undo history resets when another request is opened.
 
+Priority-1 screen proposals: [01](../designs/priority-1/gallery.md#01-params).
+
 <a id="ui-007"></a>
 ## UI-007 — Switch between JSON and raw body modes
 
@@ -724,6 +755,8 @@ JSON is validated and pretty-printed, while raw body text is preserved exactly.
 ### Notes
 
 Substitution occurs before a raw body is sent.
+
+Priority-1 screen proposals: [03](../designs/priority-1/gallery.md#03-json), [04](../designs/priority-1/gallery.md#04-json-invalid), [05](../designs/priority-1/gallery.md#05-raw).
 
 <a id="ui-008"></a>
 ## UI-008 — Duplicate or delete definitions safely
@@ -775,6 +808,8 @@ The confirmation shows environment, method, and safe URL; acceptance sends once 
 
 POST, PUT, and PATCH use the same confirmation rule; GET sends immediately.
 
+Priority-1 screen proposals: [21](../designs/priority-1/gallery.md#21-confirm-send).
+
 <a id="ui-010"></a>
 ## UI-010 — Render completed HTTP error responses
 
@@ -799,6 +834,8 @@ The lower pane renders the completed exchange as a response with status, duratio
 ### Notes
 
 JSON bodies may be formatted with raw-text fallback.
+
+Priority-1 screen proposals: [11](../designs/priority-1/gallery.md#11-response), [12](../designs/priority-1/gallery.md#12-http-error), [14](../designs/priority-1/gallery.md#14-empty-body).
 
 <a id="ui-011"></a>
 ## UI-011 — Render execution diagnostics
@@ -825,6 +862,8 @@ The lower pane renders a diagnostic with the failure stage, category, safe messa
 
 The failure is not represented as an HTTP response.
 
+Priority-1 screen proposals: [15](../designs/priority-1/gallery.md#15-validation), [16](../designs/priority-1/gallery.md#16-transport), [17](../designs/priority-1/gallery.md#17-log).
+
 <a id="ui-012"></a>
 ## UI-012 — Reveal a token only for the session
 
@@ -849,6 +888,9 @@ The token starts masked and is fully shown only after that explicit action for t
 ### Notes
 
 Revealing does not copy or persist the token.
+
+Priority-1 screen proposals: [09](../designs/priority-1/gallery.md#09-auth-reveal).
+
 
 ## Runtime safety
 
@@ -877,6 +919,8 @@ The response view and cache identify and show only the `test` response.
 
 Collection path, environment, and request ID prevent cache collisions.
 
+Priority-1 screen proposals: [13](../designs/priority-1/gallery.md#13-cached).
+
 <a id="data-002"></a>
 ## DATA-002 — Redact runtime records
 
@@ -901,6 +945,8 @@ Those records contain none of the sensitive values or raw request body.
 ### Notes
 
 Safe metadata such as request identity, status, and duration may remain.
+
+Priority-1 screen proposals: [17](../designs/priority-1/gallery.md#17-log).
 
 <a id="data-003"></a>
 ## DATA-003 — Keep runtime state out of Git
@@ -1031,24 +1077,76 @@ The workflow uses the Go version from `go.mod`, requests only `contents: read`, 
 
 It uses no secrets, artifacts, releases, or version matrix.
 
-<a id="priority-1-design-review-and-acceptance-mapping"></a>
-## Priority 1 design review and acceptance mapping
+## Priority 1 safety scenarios
 
-Source: [Priority 1 screen designs and interaction rules](../designs/priority-1/gallery.md). Visual approval is pending. The table links design proposals to existing scenarios; it does not change their implementation status or approved baselines.
+<a id="cfg-007"></a>
+## CFG-007 — Retain a draft when save-and-continue fails
 
-| Area | Mockup states | Existing acceptance coverage |
-|---|---|---|
-| Request editor | [01, 02, 06](../designs/priority-1/gallery.md#01-params) | [CFG-001](#cfg-001), [CFG-002](#cfg-002), [UI-006](#ui-006) |
-| Body editor | [03–05](../designs/priority-1/gallery.md#03-json) | [UI-007](#ui-007) |
-| Authentication | [07–09](../designs/priority-1/gallery.md#07-auth-inherited) | [CFG-003](#cfg-003), [API-003](#api-003), [API-004](#api-004), [UI-012](#ui-012) |
-| Sending and responses | [10–14](../designs/priority-1/gallery.md#10-sending) | [UI-004](#ui-004), [UI-010](#ui-010), [DATA-001](#data-001) |
-| Diagnostics and repair | [15–18](../designs/priority-1/gallery.md#15-validation) | [UI-002](#ui-002), [UI-011](#ui-011), [API-002](#api-002), [API-007](#api-007), [DATA-002](#data-002) |
-| Unsaved changes | [19–20](../designs/priority-1/gallery.md#19-dirty-navigation) | [UI-005](#ui-005) |
-| Dangerous-send confirmation | [21](../designs/priority-1/gallery.md#21-confirm-send) | [UI-009](#ui-009) |
+**Category:** CFG<br>
+**Observable surface:** TUI, Filesystem/Git<br>
+**Requirements:** R-003, R-012<br>
+**Tasks:** T-001, T-006, T-009<br>
+**Status:** planned
 
-### Proposed additional scenario coverage
+### Given
 
-After the design decisions are approved, new acceptance cases should cover sending a draft without saving, suppressing duplicate send, cancellation with unknown server outcome, successful response with cache-write failure, selected-invalid identity, malformed-YAML external repair/reload, failed save before navigation, dirty environment/quit guards, and remasking a token. Cases remain proposed until design review; existing planned cases are not marked implemented.
+A request has unsaved edits and its definition cannot be written.
+
+### When
+
+The user chooses Save and continue before navigating to another request.
+
+### Then
+
+The TUI reports the save error, keeps the current draft open, and leaves the persisted definition unchanged.
+
+Priority-1 screen proposal: [20](../designs/priority-1/gallery.md#20-save-failure).
+
+<a id="ui-020"></a>
+## UI-020 — Display cancellation as an execution diagnostic
+
+**Category:** UI<br>
+**Observable surface:** TUI, API/Protocol (HTTP)<br>
+**Requirements:** R-009<br>
+**Tasks:** T-004, T-006, T-010<br>
+**Status:** planned
+
+### Given
+
+An HTTP execution is cancelled before a response is received.
+
+### When
+
+The user views the result.
+
+### Then
+
+The TUI displays a cancellation diagnostic with safe stage/category information rather than an HTTP response.
+
+Priority-1 screen proposal: [16](../designs/priority-1/gallery.md#16-transport).
+
+<a id="ui-021"></a>
+## UI-021 — Distinguish response-storage failure from HTTP failure
+
+**Category:** UI<br>
+**Observable surface:** TUI, Filesystem/Git<br>
+**Requirements:** R-009, R-010<br>
+**Tasks:** T-005, T-006, T-010<br>
+**Status:** planned
+
+### Given
+
+An HTTP response completes, but writing its local response cache fails.
+
+### When
+
+The user views the result.
+
+### Then
+
+The completed HTTP response remains inspectable and a safe storage-stage diagnostic explains that it could not be cached.
+
+Priority-1 screen proposal: [11](../designs/priority-1/gallery.md#11-response).
 
 ## Traceability report
 
@@ -1092,6 +1190,10 @@ After the design decisions are approved, new acceptance cases should cover sendi
 | WF-001 | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | planned |
 | OPS-001 | OPS | CI | R-016 | T-013 | planned |
 
+| CFG-007 | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
+| UI-020 | UI | TUI, API/Protocol (HTTP) | R-009 | T-004, T-006, T-010 | planned |
+| UI-021 | UI | TUI, Filesystem/Git | R-009, R-010 | T-005, T-006, T-010 | planned |
+
 ### Requirements without acceptance coverage
 
 None identified in the MVP design scope.
@@ -1102,4 +1204,11 @@ None identified. Future private implementation tasks may be intentionally covere
 
 ### Ambiguities that block a trustworthy case
 
-None identified. apitool has no database requirement, so no scenario uses the `Database` surface.
+The accepted MVP spec remains authoritative. The following priority-1 proposals need decisions before their expected behavior becomes a scenario:
+
+- Send an unsaved draft versus the persisted definition; the spec does not settle this.
+- External repair plus Reload for malformed YAML versus the spec's repair-in-TUI promise.
+- Dirty environment/quit guards, especially Ctrl+C prompting versus the spec's unconditional exit.
+- Suppress a second send while busy, report unknown server outcome after cancellation, and remask tokens on leaving Auth: proposed refinements need explicit contract approval.
+
+There is no database contract, so no scenario uses the `Database` surface.

@@ -2,6 +2,8 @@
 
 Status: draft for review. Date: 2026-09-30.
 
+Review decision: retain the accepted MVP behavior. Draft proposals for sending unsaved drafts, external malformed-YAML repair, and dirty quit/environment guards remain flagged differences, not accepted requirements. See the [scenario ambiguities](../../acceptance-tests/2026-09-20-apitool-mvp.md#ambiguities-that-block-a-trustworthy-case).
+
 ## Intent and scope
 
 Design the seven priority-1 areas identified in the API tool audit: request editor, body editor, authentication, send/response lifecycle, diagnostics/repair, unsaved changes, and dangerous-send confirmation. The user requested a separate worktree and confirmed screen designs first. These are proposed layouts and interaction rules, not an implemented TUI or approved snapshot baselines.
@@ -67,7 +69,7 @@ Request Log shows timestamped safe stage metadata. Do not log token/credential v
 
 Intercept changing requests, collections, environments, and quit while dirty. The dialog identifies the draft and destination and offers Save and continue, Discard changes, Cancel. Cancel is initially focused and restores exact selection, pane focus, tab and scroll. Discard changes only affects the in-memory draft. Save and continue validates and writes first; navigate only after success. Failed validation returns to the relevant editable field; filesystem failure retains the dialog and pending destination with Retry save / Return to editing. Ctrl+C uses the same quit guard once editing exists; document this proposed change from today's immediate exit behavior.
 
-Acceptance mapping and proposed additional coverage are maintained in the [acceptance scenarios](../../acceptance-tests/2026-09-20-apitool-mvp.md#priority-1-design-review-and-acceptance-mapping).
+Acceptance scenarios and requirement/task mappings are maintained in the [acceptance scenarios](../../acceptance-tests/2026-09-20-apitool-mvp.md#test-case-index).
 
 ## Decisions for review
 
