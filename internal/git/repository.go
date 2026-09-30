@@ -79,7 +79,12 @@ type sensitiveLines struct {
 
 type redactionState struct {
 	blockIndent int
+	plainIndent int
 	quote       byte
+}
+
+func newRedactionState() redactionState {
+	return redactionState{blockIndent: -1, plainIndent: -1}
 }
 
 func redactDiffWithContext(text, fullContext string) string {
@@ -161,11 +166,11 @@ func sensitiveLineMap(fullContext string) map[string]*sensitiveLines {
 	result := map[string]*sensitiveLines{}
 	currentOld, currentNew := "", ""
 	oldLine, newLine := 0, 0
-	oldState, newState := redactionState{blockIndent: -1}, redactionState{blockIndent: -1}
+	oldState, newState := newRedactionState(), newRedactionState()
 	for _, line := range strings.Split(fullContext, "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
 			currentOld, currentNew, _ = parseDiffHeader(line)
-			oldState, newState = redactionState{blockIndent: -1}, redactionState{blockIndent: -1}
+			oldState, newState = newRedactionState(), newRedactionState()
 			continue
 		}
 		if match := diffHunk.FindStringSubmatch(line); match != nil {
@@ -231,6 +236,15 @@ func lineReplacement(lines map[int]string, number int, payload string) (string, 
 
 func (state *redactionState) redact(line string) (string, bool) {
 	indent := len(line) - len(strings.TrimLeft(line, " "))
+	if state.plainIndent >= 0 {
+		if strings.TrimSpace(line) == "" {
+			return line, false
+		}
+		if indent > state.plainIndent {
+			return line[:indent] + "[REDACTED]", true
+		}
+		state.plainIndent = -1
+	}
 	if state.blockIndent >= 0 {
 		if strings.TrimSpace(line) == "" {
 			return line, false
@@ -260,6 +274,8 @@ func (state *redactionState) redact(line string) (string, bool) {
 	}
 	if len(value) > 0 && (value[0] == '"' || value[0] == '\'') && !quoteClosedOnLine(value, value[0]) {
 		state.quote = value[0]
+	} else {
+		state.plainIndent = indent
 	}
 	return safe, true
 }

@@ -73,6 +73,7 @@ type Model struct {
 	jsonScalarDraft                              string
 	jsonScalarDirty                              bool
 	jsonScalarCursor                             int
+	jsonScalarDraftLoaded                        bool
 	bodyScroll                                   int
 	saving                                       bool
 	prompt                                       *confirmation

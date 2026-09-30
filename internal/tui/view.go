@@ -174,10 +174,14 @@ func (m Model) collectionView() string {
 		right[10] = marker + bodyLabel
 		body := m.editorFieldTextFor(6)
 		bodyLines := strings.Split(body, "\n")
-		if m.editor.mode == BodyModeJSON && !m.jsonTextPresentation {
+		structuredBody := m.editor.mode == BodyModeJSON && !m.jsonTextPresentation
+		if structuredBody {
 			bodyLines = strings.Split(m.structuredJSONLines(), "\n")
 		}
 		cursorRow, cursorCol := bodyCursorPosition(body, m.fieldCursor)
+		if structuredBody && len(bodyLines) > 0 {
+			cursorRow = min(m.jsonCursor, len(bodyLines)-1)
+		}
 		visibleRows := 5
 		if m.editorField == 6 {
 			if cursorRow < m.bodyScroll {
@@ -194,7 +198,7 @@ func (m Model) collectionView() string {
 			}
 			line := bodyLines[lineIndex]
 			available := max(1, rightWidth-2)
-			if m.editorField == 6 && lineIndex == cursorRow {
+			if m.editorField == 6 && lineIndex == cursorRow && !structuredBody {
 				line = scrollBodyLineToCursor(line, cursorCol, available)
 			} else {
 				line = truncateRunes(line, available)

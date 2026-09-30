@@ -224,6 +224,35 @@ func TestStructuredScalarBackspaceEditsOnlySelectedValue(t *testing.T) {
 	}
 }
 
+func TestStructuredScalarCursorMovesBeforeEditing(t *testing.T) {
+	m := editorWithJSON(t, `{"a":"old"}`)
+	m.editorField = 6
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyHome},
+		{Type: tea.KeyDelete},
+		{Type: tea.KeyRunes, Runes: []rune("X")},
+		{Type: tea.KeyEnter},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	content := m.editor.Request().Request.Body.Content.(map[string]any)
+	if content["a"] != "Xld" {
+		t.Fatalf("structured scalar after Home/Delete/insert = %#v", content["a"])
+	}
+}
+
+func TestStructuredJSONScrollFollowsSelectedScalar(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}`)
+	m.width, m.height = 100, 30
+	m.editorField = 6
+	m.jsonCursor = 6
+	view := m.View()
+	if !strings.Contains(view, "> $.g: 7") {
+		t.Fatalf("selected structured scalar is not visible in the scrolled body pane: %q", view)
+	}
+}
+
 func TestUndoAfterCommittingFieldRestoresTypedValue(t *testing.T) {
 	m := editorWithJSON(t, `{"a":1}`)
 	for _, key := range []tea.KeyMsg{

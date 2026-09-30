@@ -581,7 +581,7 @@ func (m *Model) beginEdit(id string) {
 	m.duplicateFlow, m.duplicateTarget = false, ""
 	m.draftUndo, m.draftRedo = nil, nil
 	m.jsonTextPresentation, m.jsonCursor = false, 0
-	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor = "", false, 0
+	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor, m.jsonScalarDraftLoaded = "", false, 0, false
 	if ok {
 		m.message = ""
 	}
@@ -621,7 +621,7 @@ func (m *Model) requestNavigation(direction int) {
 func (m *Model) discardEdits() {
 	m.editor, m.prompt = nil, nil
 	m.duplicateFlow, m.duplicateTarget = false, ""
-	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor = "", false, 0
+	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor, m.jsonScalarDraftLoaded = "", false, 0, false
 	m.mode = browseMode
 	m.message = ""
 }
@@ -739,6 +739,7 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 					m.jsonCursor = max(0, m.jsonCursor-1)
 				}
 				m.jsonScalarDirty = false
+				m.jsonScalarDraftLoaded = false
 			} else {
 				m.moveBodyCursorVertical(key.Type == tea.KeyDown)
 			}
@@ -811,6 +812,7 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		if structuredJSON && m.jsonScalarDirty {
 			m.jsonScalarDraft = ""
 			m.jsonScalarDirty = false
+			m.jsonScalarDraftLoaded = false
 			return nil
 		}
 		if m.undoFieldDraft() {
@@ -944,7 +946,7 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) ensureJSONScalarDraft() {
-	if m.jsonScalarDirty {
+	if m.jsonScalarDraftLoaded {
 		return
 	}
 	scalars, err := jsonScalars(m.editor.bodyText)
@@ -962,6 +964,7 @@ func (m *Model) ensureJSONScalarDraft() {
 		m.jsonScalarDraft = text
 	}
 	m.jsonScalarCursor = len([]rune(m.jsonScalarDraft))
+	m.jsonScalarDraftLoaded = true
 }
 
 func (m *Model) commitJSONScalar() bool {
@@ -982,6 +985,7 @@ func (m *Model) commitJSONScalar() bool {
 	m.jsonScalarDirty = false
 	m.jsonScalarDraft = ""
 	m.jsonScalarCursor = 0
+	m.jsonScalarDraftLoaded = false
 	m.fieldDraft = m.editor.bodyText
 	m.editor.validation = ""
 	return true

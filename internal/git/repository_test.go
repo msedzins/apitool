@@ -248,6 +248,12 @@ auth:
     OLD_TOKEN_LINE_TWO
   client_secret: "OLD_SECRET_LINE_ONE
     OLD_SECRET_LINE_TWO"
+headers:
+  Authorization: Bearer OLD_PLAIN_AUTH_LINE_ONE
+    OLD_PLAIN_AUTH_LINE_TWO
+auth_plain:
+  client_secret:
+    OLD_PLAIN_SECRET_LINE
 `
 	after := `name: Updated request
 headers:
@@ -263,6 +269,12 @@ auth:
     NEW_TOKEN_LINE_TWO
   client_secret: "NEW_SECRET_LINE_ONE
     NEW_SECRET_LINE_TWO"
+headers:
+  Authorization: Bearer NEW_PLAIN_AUTH_LINE_ONE
+    NEW_PLAIN_AUTH_LINE_TWO
+auth_plain:
+  client_secret:
+    NEW_PLAIN_SECRET_LINE
 `
 	partialBefore := "name: Partial\nauth:\n  client_secret: |-\n    OLD_PARTIAL_SECRET_ONE\n    OLD_PARTIAL_SECRET_TWO\nmetadata:\n  description: Original text\n"
 	partialAfter := "name: Partial\nauth:\n  client_secret: |-\n    OLD_PARTIAL_SECRET_ONE\n    OLD_PARTIAL_SECRET_TWO\nmetadata:\n  description: Updated text\n"
@@ -295,6 +307,8 @@ auth:
 		"OLD_COOKIE_LINE_ONE", "OLD_COOKIE_LINE_TWO", "NEW_COOKIE_LINE_ONE", "NEW_COOKIE_LINE_TWO",
 		"OLD_TOKEN_LINE_ONE", "OLD_TOKEN_LINE_TWO", "NEW_TOKEN_LINE_ONE", "NEW_TOKEN_LINE_TWO",
 		"OLD_SECRET_LINE_ONE", "OLD_SECRET_LINE_TWO", "NEW_SECRET_LINE_ONE", "NEW_SECRET_LINE_TWO",
+		"OLD_PLAIN_AUTH_LINE_ONE", "OLD_PLAIN_AUTH_LINE_TWO", "NEW_PLAIN_AUTH_LINE_ONE", "NEW_PLAIN_AUTH_LINE_TWO",
+		"OLD_PLAIN_SECRET_LINE", "NEW_PLAIN_SECRET_LINE",
 		"OLD_PARTIAL_SECRET_ONE", "OLD_PARTIAL_SECRET_TWO",
 	} {
 		if strings.Contains(diff, credential) {
