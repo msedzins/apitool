@@ -31,7 +31,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
 | [T-005](#task-5-status) | Needs corrections | Prevent collisions between nested cache identities. |
 | [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
-| [T-007](#task-7-status) | In progress | Redact multiline credentials from Git diffs. |
+| [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
 | [T-008](#task-8-status) | Needs corrections | Fix editor focus and mode-aware mouse routing. |
 | [T-009](#task-9-status) | Needs corrections | Add structured JSON editing; fix literal input and invalid-draft undo. |
 | [T-010](#task-10-status) | Planned | Send workflow and response/diagnostic/token views. |
@@ -563,7 +563,7 @@ Files: `internal/app/service.go`, `internal/app/service_test.go`, `internal/coll
 <a id="task-7-status"></a>
 ### Task 7: Thin local-Git adapter
 
-**Status:** In progress
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/git/repository.go`
@@ -628,7 +628,7 @@ Files: `internal/git/repository.go`, `internal/git/repository_test.go`.
 - [x] Run `go test ./internal/git -run TestDiffRedactsMultilineYAMLCredentials`; confirm FAIL before the correction.
 - [x] Redact complete sensitive values and their continuation lines in both diff directions. Handle partial hunks conservatively; use full-file context where necessary to establish whether a continuation is sensitive. Preserve runtime path exclusion.
 - [x] Run `go test ./internal/git ./internal/app`; require PASS, including staged/unstaged diffs and negative Git-operation checks.
-- [ ] Review and commit before marking this task Implemented.
+- [x] Review and commit before marking this task Implemented.
 
 
 <a id="task-8-status"></a>
