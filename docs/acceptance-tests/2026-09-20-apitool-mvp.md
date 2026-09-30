@@ -1031,6 +1031,25 @@ The workflow uses the Go version from `go.mod`, requests only `contents: read`, 
 
 It uses no secrets, artifacts, releases, or version matrix.
 
+<a id="priority-1-design-review-and-acceptance-mapping"></a>
+## Priority 1 design review and acceptance mapping
+
+Source: [Priority 1 screen designs and interaction rules](../designs/priority-1/gallery.md). Visual approval is pending. The table links design proposals to existing scenarios; it does not change their implementation status or approved baselines.
+
+| Area | Mockup states | Existing acceptance coverage |
+|---|---|---|
+| Request editor | [01, 02, 06](../designs/priority-1/gallery.md#01-params) | [CFG-001](#cfg-001), [CFG-002](#cfg-002), [UI-006](#ui-006) |
+| Body editor | [03–05](../designs/priority-1/gallery.md#03-json) | [UI-007](#ui-007) |
+| Authentication | [07–09](../designs/priority-1/gallery.md#07-auth-inherited) | [CFG-003](#cfg-003), [API-003](#api-003), [API-004](#api-004), [UI-012](#ui-012) |
+| Sending and responses | [10–14](../designs/priority-1/gallery.md#10-sending) | [UI-004](#ui-004), [UI-010](#ui-010), [DATA-001](#data-001) |
+| Diagnostics and repair | [15–18](../designs/priority-1/gallery.md#15-validation) | [UI-002](#ui-002), [UI-011](#ui-011), [API-002](#api-002), [API-007](#api-007), [DATA-002](#data-002) |
+| Unsaved changes | [19–20](../designs/priority-1/gallery.md#19-dirty-navigation) | [UI-005](#ui-005) |
+| Dangerous-send confirmation | [21](../designs/priority-1/gallery.md#21-confirm-send) | [UI-009](#ui-009) |
+
+### Proposed additional scenario coverage
+
+After the design decisions are approved, new acceptance cases should cover sending a draft without saving, suppressing duplicate send, cancellation with unknown server outcome, successful response with cache-write failure, selected-invalid identity, malformed-YAML external repair/reload, failed save before navigation, dirty environment/quit guards, and remasking a token. Cases remain proposed until design review; existing planned cases are not marked implemented.
+
 ## Traceability report
 
 | Test case | Category | Observable surface | Requirement | Task | Status |
