@@ -64,6 +64,9 @@ type Model struct {
 	selectedID                                   string
 	editorField                                  int
 	replaceField                                 bool
+	fieldDraft                                   string
+	fieldDraftDirty                              bool
+	saving                                       bool
 	prompt                                       *confirmation
 	duplicateFlow                                bool
 	duplicateTarget                              string

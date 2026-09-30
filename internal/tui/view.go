@@ -48,7 +48,7 @@ func (m Model) View() string {
 	if m.prompt != nil {
 		return m.confirmationView()
 	}
-	if m.mode == requestEditMode {
+	if m.mode == requestEditMode && m.height > 0 && m.height < 22 {
 		return m.editorDisplay()
 	}
 	var view string
@@ -94,7 +94,9 @@ func (m Model) collectionView() string {
 	left, right := make([]string, height), make([]string, height)
 	if height > 1 {
 		left[1] = paneHeading(m.focus == collectionPane, "Collections / tree")
-		if request, ok := m.activeRequest(); ok {
+		if m.mode == requestEditMode && m.editor != nil {
+			right[1] = paneHeading(m.focus == requestPane, "Request editor")
+		} else if request, ok := m.activeRequest(); ok {
 			urlWidth := 48
 			if m.focus == requestPane {
 				urlWidth = 46
@@ -103,7 +105,11 @@ func (m Model) collectionView() string {
 		}
 	}
 	if height > 3 {
-		right[3] = " Params | Headers | Auth | Body | Settings"
+		if m.mode == requestEditMode && m.editor != nil {
+			right[3] = " Edit request fields | Tab/Enter next | Ctrl+S save"
+		} else {
+			right[3] = " Params | Headers | Auth | Body | Settings"
+		}
 	}
 	for index, line := range m.collectionTreeLines() {
 		row := index + 3
@@ -133,6 +139,29 @@ func (m Model) collectionView() string {
 		}
 	}
 	responseDivider := 8
+	if m.mode == requestEditMode && m.editor != nil && height >= 22 {
+		responseDivider = 13
+		labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", "Body (JSON)"}
+		for index, label := range labels {
+			row := index + 4
+			if row >= responseDivider {
+				break
+			}
+			value := m.editorFieldTextFor(index)
+			value = strings.ReplaceAll(value, "\n", "\\n")
+			marker := "  "
+			if m.editorField == index {
+				marker = "▶ "
+			}
+			right[row] = marker + label + ": " + value
+		}
+		if m.duplicateFlow && responseDivider-2 < height {
+			right[responseDivider-2] = "  Save as: " + m.editorFieldTextFor(7)
+		}
+		if m.editor.validation != "" {
+			right[responseDivider-1] = "  Validation: " + m.editor.validation
+		}
+	}
 	if responseDivider < height {
 		right[responseDivider+1] = paneHeading(m.focus == responsePane, "Response / Diagnostics / Request Log")
 	}
@@ -140,11 +169,15 @@ func (m Model) collectionView() string {
 		right[responseDivider+2] = " Select Send to execute this request."
 		messageRows := 0
 		if m.message != "" {
-			message := []rune(m.message)
+			status := m.message
+			if m.mode == requestEditMode {
+				status = " Status: " + status
+			}
+			message := []rune(status)
 			right[responseDivider+2] = string(message[:min(len(message), rightWidth)])
 			messageRows = 1
 			if len(message) > rightWidth && responseDivider+3 < height {
-				right[responseDivider+3] = string(message[rightWidth:])
+				right[responseDivider+3] = string(message[rightWidth:min(len(message), 2*rightWidth)])
 				messageRows++
 			}
 		}

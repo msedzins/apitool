@@ -3,8 +3,10 @@ package collection
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,9 +58,17 @@ func LoadEnvironment(path string) (model.Environment, error) {
 
 // LoadRequest reads a request, accepting auth: none and either supported scope form.
 func LoadRequest(path string) (model.Request, error) {
-	var document requestDocument
-	if err := loadYAML(path, &document); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil {
 		return model.Request{}, err
+	}
+	var document requestDocument
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return model.Request{}, fmt.Errorf("decode YAML: %w", err)
+	}
+	requestConfig, err := decodeRequestConfig(document.Request)
+	if err != nil {
+		return model.Request{}, fmt.Errorf("decode request body: %w", err)
 	}
 
 	auth, err := decodeAuth(document.Auth)
@@ -72,7 +82,7 @@ func LoadRequest(path string) (model.Request, error) {
 	return model.Request{
 		Name:    document.Name,
 		Method:  strings.ToUpper(document.Method),
-		Request: document.Request,
+		Request: requestConfig,
 		Auth:    auth,
 	}, nil
 }
@@ -122,10 +132,105 @@ func SaveRequest(path string, request model.Request) error {
 }
 
 type requestDocument struct {
-	Name    string              `yaml:"name"`
-	Method  string              `yaml:"method"`
-	Request model.RequestConfig `yaml:"request"`
-	Auth    yaml.Node           `yaml:"auth,omitempty"`
+	Name    string                `yaml:"name"`
+	Method  string                `yaml:"method"`
+	Request requestConfigDocument `yaml:"request"`
+	Auth    yaml.Node             `yaml:"auth,omitempty"`
+}
+type requestConfigDocument struct {
+	URL     string            `yaml:"url"`
+	Params  map[string]string `yaml:"params,omitempty"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Body    *bodyDocument     `yaml:"body,omitempty"`
+}
+type bodyDocument struct {
+	Type    string    `yaml:"type"`
+	Content yaml.Node `yaml:"content"`
+}
+
+func decodeRequestConfig(document requestConfigDocument) (model.RequestConfig, error) {
+	config := model.RequestConfig{URL: document.URL, Params: document.Params, Headers: document.Headers}
+	if document.Body == nil {
+		return config, nil
+	}
+	content, err := decodeBodyNode(&document.Body.Content)
+	if err != nil {
+		return model.RequestConfig{}, err
+	}
+	config.Body = &model.Body{Type: document.Body.Type, Content: content}
+	return config, nil
+}
+func decodeBodyNode(node *yaml.Node) (any, error) {
+	if node == nil || node.Kind == 0 {
+		return nil, nil
+	}
+	switch node.Kind {
+	case yaml.MappingNode:
+		result := make(map[string]any, len(node.Content)/2)
+		for index := 0; index < len(node.Content); index += 2 {
+			key := node.Content[index]
+			if key.Tag != "!!str" {
+				return nil, fmt.Errorf("JSON body object keys must be strings")
+			}
+			value, err := decodeBodyNode(node.Content[index+1])
+			if err != nil {
+				return nil, err
+			}
+			result[key.Value] = value
+		}
+		return result, nil
+	case yaml.SequenceNode:
+		result := make([]any, len(node.Content))
+		for index, child := range node.Content {
+			value, err := decodeBodyNode(child)
+			if err != nil {
+				return nil, err
+			}
+			result[index] = value
+		}
+		return result, nil
+	case yaml.ScalarNode:
+		switch node.Tag {
+		case "!!str":
+			return node.Value, nil
+		case "!!null":
+			return nil, nil
+		case "!!bool":
+			return node.Value == "true", nil
+		case "!!int", "!!float":
+			value := strings.ReplaceAll(node.Value, "_", "")
+			if node.Tag == "!!int" {
+				if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") || strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O") || strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") {
+					base := 0
+					number, ok := new(big.Int).SetString(value, base)
+					if !ok {
+						return nil, fmt.Errorf("invalid JSON body integer")
+					}
+					value = number.String()
+				} else if strings.HasPrefix(value, "+") {
+					value = strings.TrimPrefix(value, "+")
+				}
+				if integer, err := strconv.ParseInt(value, 10, 64); err == nil {
+					return int(integer), nil
+				}
+				return model.JSONNumber(value), nil
+			}
+			if strings.HasPrefix(value, ".") {
+				value = "0" + value
+			}
+			if strings.HasPrefix(value, "-.") {
+				value = "-0" + value
+			}
+			if strings.HasSuffix(value, ".") {
+				value += "0"
+			}
+			return model.JSONNumber(value), nil
+		default:
+			return nil, fmt.Errorf("unsupported YAML scalar %s in JSON body", node.Tag)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported YAML node in JSON body")
+	}
 }
 
 type collectionDocument struct {

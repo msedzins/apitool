@@ -78,6 +78,7 @@ type Selection struct {
 	Environment string
 	RequestID   string
 	Confirmed   bool
+	CreateOnly  bool
 }
 type SendResult struct {
 	Response             *model.Response
@@ -268,7 +269,20 @@ func (s *Service) SaveRequest(_ context.Context, selection Selection, request mo
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create request directory: %w", err)
 	}
-	if err := collection.SaveRequest(path, request); err != nil {
+	if selection.CreateOnly {
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		if err := file.Close(); err != nil {
+			_ = os.Remove(path)
+			return err
+		}
+		if err := collection.SaveRequest(path, request); err != nil {
+			_ = os.Remove(path)
+			return err
+		}
+	} else if err := collection.SaveRequest(path, request); err != nil {
 		return err
 	}
 	return s.refreshTree(selection.Collection)

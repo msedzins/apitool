@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 
@@ -107,8 +108,15 @@ func (e *RequestEditor) SwitchBodyMode(mode BodyMode) {
 	if e.mode == mode {
 		return
 	}
-	var value any
-	if err := json.Unmarshal([]byte(e.bodyText), &value); err != nil {
+	if mode == BodyModeRaw && e.request.Request.Body == nil && strings.TrimSpace(e.bodyText) == "" {
+		e.pushUndo()
+		e.mode = BodyModeRaw
+		e.setBody("raw", "")
+		e.validation = ""
+		return
+	}
+	value, err := decodeJSONValue(e.bodyText)
+	if err != nil {
 		e.validation = "invalid JSON body: " + err.Error()
 		return
 	}
@@ -140,8 +148,8 @@ func (e *RequestEditor) SetBodyText(text string) {
 		e.setBody("raw", text)
 		return
 	}
-	var value any
-	if err := json.Unmarshal([]byte(text), &value); err == nil {
+	value, err := decodeJSONValue(text)
+	if err == nil {
 		e.setBody("json", value)
 	}
 }
@@ -181,9 +189,9 @@ func (e *RequestEditor) FieldText(index int) string {
 	case 2:
 		return e.request.Request.URL
 	case 3:
-		return formatPairs(e.request.Request.Params)
+		return formatStringMap(e.request.Request.Params)
 	case 4:
-		return formatPairs(e.request.Request.Headers)
+		return formatStringMap(e.request.Request.Headers)
 	case 5:
 		return formatAuth(e.request.Auth)
 	case 6:
@@ -203,9 +211,9 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 	case 2:
 		e.SetURL(value)
 	case 3:
-		e.SetParams(parsePairs(value))
+		e.SetParams(parseStringMap(value))
 	case 4:
-		e.SetHeaders(parsePairs(value))
+		e.SetHeaders(parseStringMap(value))
 	case 5:
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" || trimmed == "inherit" {
@@ -213,11 +221,18 @@ func (e *RequestEditor) SetFieldText(index int, value string) {
 		} else if trimmed == "none" {
 			e.SetAuth(&model.Auth{None: true})
 		} else {
-			var auth model.Auth
-			if err := json.Unmarshal([]byte(trimmed), &auth); err != nil {
+			var value struct {
+				Type         string   `json:"type"`
+				Grant        string   `json:"grant"`
+				TokenURL     string   `json:"token_url"`
+				ClientID     string   `json:"client_id"`
+				ClientSecret string   `json:"client_secret"`
+				Scopes       []string `json:"scopes"`
+			}
+			if err := json.Unmarshal([]byte(trimmed), &value); err != nil {
 				e.validation = "auth must be inherit, none, or a JSON OAuth object"
 			} else {
-				e.SetAuth(&auth)
+				e.SetAuth(&model.Auth{Type: value.Type, Grant: value.Grant, TokenURL: value.TokenURL, ClientID: value.ClientID, ClientSecret: value.ClientSecret, Scopes: value.Scopes})
 			}
 		}
 	case 6:
@@ -253,8 +268,8 @@ func (e *RequestEditor) validatedRequest() (model.Request, error) {
 			request.Request.Body.Type = "raw"
 			request.Request.Body.Content = e.bodyText
 		} else {
-			var value any
-			if err := json.Unmarshal([]byte(e.bodyText), &value); err != nil {
+			value, err := decodeJSONValue(e.bodyText)
+			if err != nil {
 				return model.Request{}, fmt.Errorf("invalid JSON body: %w", err)
 			}
 			request.Request.Body.Type = "json"
@@ -317,16 +332,85 @@ func cloneRequest(request model.Request) model.Request {
 	copy.Auth = cloneAuth(request.Auth)
 	if request.Request.Body != nil {
 		body := *request.Request.Body
-		if data, err := json.Marshal(body.Content); err == nil {
-			var content any
-			if json.Unmarshal(data, &content) == nil {
-				body.Content = content
-			}
-		}
+		body.Content = cloneJSONValue(body.Content)
 		copy.Request.Body = &body
 	}
 	return copy
 }
+func decodeJSONValue(text string) (any, error) {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected trailing JSON value")
+		}
+		return nil, err
+	}
+	return preserveJSONNumbers(value), nil
+}
+func preserveJSONNumbers(value any) any {
+	switch value := value.(type) {
+	case json.Number:
+		return model.JSONNumber(value.String())
+	case []any:
+		for i := range value {
+			value[i] = preserveJSONNumbers(value[i])
+		}
+		return value
+	case map[string]any:
+		for key, item := range value {
+			value[key] = preserveJSONNumbers(item)
+		}
+		return value
+	default:
+		return value
+	}
+}
+
+func cloneJSONValue(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		copy := make(map[string]any, len(value))
+		for key, item := range value {
+			copy[key] = cloneJSONValue(item)
+		}
+		return copy
+	case []any:
+		copy := make([]any, len(value))
+		for index, item := range value {
+			copy[index] = cloneJSONValue(item)
+		}
+		return copy
+	default:
+		return value
+	}
+}
+func formatStringMap(values map[string]string) string {
+	if values == nil {
+		return "{}"
+	}
+	data, _ := json.Marshal(values)
+	return string(data)
+}
+func parseStringMap(value string) map[string]string {
+	var result map[string]string
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if json.Unmarshal([]byte(value), &result) != nil {
+		return nil
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
 func cloneMap(source map[string]string) map[string]string {
 	if source == nil {
 		return nil
@@ -355,17 +439,21 @@ func (m Model) editorDisplay() string {
 	if m.editor.mode == BodyModeRaw {
 		mode = "Raw"
 	}
-	lines := []string{
-		"Request editor — Ctrl+S save • Ctrl+Z undo • Ctrl+Y redo • Esc close",
-		"Name: " + request.Name,
-		"Method: " + request.Method,
-		"URL: " + request.Request.URL,
-		"Params: " + formatPairs(request.Request.Params),
-		"Headers: " + formatPairs(request.Request.Headers),
-		"Auth: " + formatAuth(request.Auth),
-		"Body (" + mode + "): " + strings.ReplaceAll(m.editor.bodyText, "\n", "\\n"),
-		"Edit fields with Tab/Enter and type; Ctrl+B switches body mode; Ctrl+P opens actions.",
+	labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", "Body (" + mode + ")"}
+	values := []string{request.Name, request.Method, request.Request.URL, formatStringMap(request.Request.Params), formatStringMap(request.Request.Headers), formatAuth(request.Auth), strings.ReplaceAll(m.editor.bodyText, "\n", "\\n")}
+	lines := []string{"Request editor — Ctrl+S save • Ctrl+Z undo • Ctrl+Y redo • Esc close"}
+	for index, label := range labels {
+		marker := "  "
+		if m.editorField == index {
+			marker = "▶ "
+		}
+		value := values[index]
+		if m.editorField == index {
+			value = m.editorFieldText()
+		}
+		lines = append(lines, marker+label+": "+value)
 	}
+	lines = append(lines, "Edit fields with Tab/Enter and type; Ctrl+B switches body mode; Ctrl+P opens actions.")
 	if m.duplicateFlow {
 		lines = append(lines, "Save as: "+m.duplicateTarget)
 		lines = append(lines, "Duplicate path is the final editor field; Ctrl+S saves the copy.")
@@ -392,7 +480,16 @@ func formatAuth(auth *model.Auth) string {
 	if auth.None {
 		return "none"
 	}
-	return auth.Type + " " + auth.Grant
+	value := struct {
+		Type         string   `json:"type"`
+		Grant        string   `json:"grant,omitempty"`
+		TokenURL     string   `json:"token_url,omitempty"`
+		ClientID     string   `json:"client_id,omitempty"`
+		ClientSecret string   `json:"client_secret,omitempty"`
+		Scopes       []string `json:"scopes,omitempty"`
+	}{auth.Type, auth.Grant, auth.TokenURL, auth.ClientID, auth.ClientSecret, auth.Scopes}
+	data, _ := json.Marshal(value)
+	return string(data)
 }
 
 func parsePairs(value string) map[string]string {
@@ -407,4 +504,17 @@ func parsePairs(value string) map[string]string {
 		return nil
 	}
 	return result
+}
+
+func (m Model) editorFieldTextFor(index int) string {
+	if m.editor == nil {
+		return ""
+	}
+	if index == m.editorField {
+		return m.editorFieldText()
+	}
+	if m.duplicateFlow && index == 7 {
+		return m.duplicateTarget
+	}
+	return m.editor.FieldText(index)
 }

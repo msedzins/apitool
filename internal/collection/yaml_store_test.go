@@ -197,3 +197,31 @@ func writeNamedFile(t *testing.T, name, content string) string {
 	}
 	return path
 }
+
+func TestLoadRequestAndSavePreservesExactJSONNumbers(t *testing.T) {
+	path := writeFile(t, `name: Numbers
+method: POST
+request:
+  url: https://example.test/numbers
+  body:
+    type: json
+    content:
+      large: 9007199254740993
+      precise: 0.123456789123456789`)
+	request, err := collection.LoadRequest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := collection.SaveRequest(path, request); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, number := range []string{"9007199254740993", "0.123456789123456789"} {
+		if !strings.Contains(string(data), number) {
+			t.Fatalf("saved YAML lost numeric token %q: %s", number, data)
+		}
+	}
+}

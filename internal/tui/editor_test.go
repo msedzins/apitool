@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -369,5 +370,186 @@ func TestEOpensTypedRequestEditor(t *testing.T) {
 	m.handleRune("e")
 	if m.mode != requestEditMode || m.editor == nil {
 		t.Fatal("e did not open the selected request editor")
+	}
+}
+
+func TestBodylessRequestCanStartInRawMode(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editor.Load(validRequest("Empty body", "https://example.test/empty", nil))
+	m.editor.SwitchBodyMode(BodyModeRaw)
+	if m.editor.Validation() != "" || m.editor.mode != BodyModeRaw {
+		t.Fatalf("raw mode unavailable for bodyless request: %s", m.editor.Validation())
+	}
+	m.editor.SetBodyText("<xml/>")
+	request, err := m.editor.validatedRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Request.Body == nil || request.Request.Body.Content != "<xml/>" {
+		t.Fatalf("raw body = %#v", request.Request.Body)
+	}
+}
+
+func TestUnrelatedEditPreservesLargeJSONInteger(t *testing.T) {
+	m := editorWithJSON(t, `{"large":9007199254740993}`)
+	m.editor.SetURL("https://example.test/changed")
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatalf("Save() failed: %s", m.message)
+	}
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	data, err := os.ReadFile(filepath.Join(m.view.Root, ".api", "requests", "one.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "9007199254740993") {
+		t.Fatalf("large integer changed during unrelated save: %s", data)
+	}
+}
+
+func TestKeyboardCompositionPreservesHeadersAndParams(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	typeText := func(field int, text string) {
+		m.editorField, m.replaceField = field, true
+		for _, r := range text {
+			m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+		m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyTab})
+	}
+	typeText(4, `{"Accept":"application/json, text/plain "}`)
+	typeText(3, `{"q":" a,b "}`)
+	request := m.editor.Request()
+	if got := request.Request.Headers["Accept"]; got != "application/json, text/plain " {
+		t.Fatalf("Accept header = %q", got)
+	}
+	if got := request.Request.Params["q"]; got != " a,b " {
+		t.Fatalf("query parameter = %q", got)
+	}
+}
+
+func TestDiscardNavigationOpensRequestedNestedRequest(t *testing.T) {
+	m := editorWithChangedURL(t)
+	ids := m.view.Tree.RequestIDs
+	current := m.editor.Selection().RequestID
+	index := 0
+	for i, id := range ids {
+		if id == current {
+			index = i
+			break
+		}
+	}
+	target := ids[(index+1)%len(ids)]
+	m.requestNavigation(1)
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	if m.editor == nil || m.editor.Selection().RequestID != target {
+		t.Fatalf("discard opened %#v, want %q", m.editor, target)
+	}
+}
+
+func TestEditorLocksInputUntilSaveCompletes(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editorField, m.replaceField = 2, false
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatal("Save() returned no command")
+	}
+	before := m.editor.Request().Request.URL
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if got := m.editor.Request().Request.URL; got != before {
+		t.Fatalf("editor accepted input while saving: %q", got)
+	}
+	m, _ = updateModel(m, cmd())
+	if got := m.editor.Request().Request.URL; got != before {
+		t.Fatalf("save completion changed URL to %q", got)
+	}
+}
+
+func TestDuplicateCannotOverwriteNormalizedSourcePath(t *testing.T) {
+	for _, target := range []string{"./one", "nested/../one"} {
+		t.Run(target, func(t *testing.T) {
+			m := editorWithJSON(t, `{"a":1}`)
+			path := filepath.Join(m.view.Root, ".api", "requests", "one.yaml")
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.beginDuplicate()
+			m.setEditorFieldText(target)
+			cmd := m.Save()
+			if cmd == nil {
+				t.Fatalf("duplicate command was not issued: %s", m.message)
+			}
+			m, _ = updateModel(m, cmd())
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Fatalf("duplicate overwrote source via %q", target)
+			}
+		})
+	}
+}
+
+func TestDuplicateDoesNotOverwriteDestinationCreatedAfterFlowStarts(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.beginDuplicate()
+	path := filepath.Join(m.view.Root, ".api", "requests", "one-copy.yaml")
+	if err := os.WriteFile(path, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatal("duplicate save command was not issued")
+	}
+	m, _ = updateModel(m, cmd())
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "keep me\n" {
+		t.Fatalf("late destination was overwritten: %s", data)
+	}
+}
+
+func TestEditorMarksActiveFieldAndPreservesThreePaneShell(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editorField = 2
+	view := m.View()
+	for _, want := range []string{"Collections / tree", "Request editor", "Response / Diagnostics", "▶ URL:"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("editor view lacks %q: %s", want, view)
+		}
+	}
+}
+
+func TestSavedDuplicateCanBeEditedAgain(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.beginDuplicate()
+	if cmd := m.Save(); cmd == nil {
+		t.Fatalf("saving duplicate: %s", m.message)
+	} else {
+		m, _ = updateModel(m, cmd())
+	}
+	m.editor.SetURL("https://example.test/updated-copy")
+	if cmd := m.Save(); cmd == nil {
+		t.Fatalf("saving edited copy: %s", m.message)
+	} else {
+		m, _ = updateModel(m, cmd())
+	}
+	if m.message != "Saved one-copy" {
+		t.Fatalf("second save message = %q", m.message)
+	}
+}
+
+func TestAuthFieldTextPreservesTypedOAuthConfiguration(t *testing.T) {
+	request := validRequest("OAuth", "https://example.test", nil)
+	request.Auth = &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "client", ClientSecret: "${CLIENT_SECRET}", Scopes: []string{"read", "write"}}
+	editor := newRequestEditor(nil, app.Selection{}, request)
+	text := editor.FieldText(5)
+	editor.SetFieldText(5, text)
+	if got := editor.Request().Auth; !reflect.DeepEqual(got, request.Auth) {
+		t.Fatalf("OAuth config after field round trip = %#v, want %#v", got, request.Auth)
 	}
 }

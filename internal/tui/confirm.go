@@ -21,7 +21,6 @@ const (
 type confirmation struct {
 	kind         confirmationKind
 	targetID     string
-	targetIndex  int
 	group        bool
 	paths        []string
 	deleteTarget app.DeleteTarget
@@ -50,9 +49,10 @@ func (m *Model) beginDuplicate() {
 	for suffix := 2; m.requestIDExists(targetID); suffix++ {
 		targetID = fmt.Sprintf("%s-copy-%d", selection.RequestID, suffix)
 	}
-	m.editor.SetSelection(app.Selection{Collection: selection.Collection, Environment: selection.Environment, RequestID: targetID})
+	m.editor.SetSelection(app.Selection{Collection: selection.Collection, Environment: selection.Environment, RequestID: targetID, CreateOnly: true})
 	m.editor.SetName("Copy of " + request.Name)
 	m.editorField, m.replaceField = 7, true
+	m.fieldDraft, m.fieldDraftDirty = targetID, false
 	m.duplicateFlow = true
 	m.duplicateTarget = targetID
 	m.message = ""
@@ -112,14 +112,16 @@ func (m *Model) handleConfirmation(key tea.KeyMsg) tea.Cmd {
 	case confirmDirtyNavigation:
 		switch strings.ToLower(value) {
 		case "s":
-			m.prompt.saving = true
-			return m.Save()
+			cmd := m.Save()
+			if cmd != nil {
+				m.prompt.saving = true
+			}
+			return cmd
 		case "d":
-			target := m.prompt.targetIndex
+			target := m.prompt.targetID
 			m.prompt = nil
 			m.discardEdits()
-			m.treeIndex = target
-			m.openSelected()
+			m.beginEdit(target)
 		}
 	case confirmDeleteTarget:
 		if strings.ToLower(value) == "y" {

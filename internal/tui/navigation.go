@@ -462,6 +462,8 @@ func (m *Model) beginEdit(id string) {
 	m.selectedID = id
 	m.editor = newRequestEditor(m.service, app.Selection{Collection: m.collection, Environment: m.view.Environment, RequestID: id}, node.Request)
 	m.mode, m.editorField, m.replaceField = requestEditMode, 0, true
+	m.fieldDraft = m.editor.FieldText(0)
+	m.fieldDraftDirty = false
 	m.duplicateFlow, m.duplicateTarget = false, ""
 	m.message = ""
 }
@@ -480,7 +482,7 @@ func (m *Model) requestNavigation(direction int) {
 	}
 	target := wrap(index+direction, len(ids))
 	if m.editor.Dirty() {
-		m.prompt = &confirmation{kind: confirmDirtyNavigation, targetIndex: target}
+		m.prompt = &confirmation{kind: confirmDirtyNavigation, targetID: ids[target]}
 		return
 	}
 	m.beginEdit(ids[target])
@@ -494,16 +496,36 @@ func (m *Model) discardEdits() {
 }
 
 func (m *Model) Save() tea.Cmd {
-	if m.editor == nil {
+	if m.editor == nil || m.saving {
 		return nil
 	}
+	m.commitEditorField()
 	if m.duplicateFlow && (m.duplicateTarget == "" || m.requestIDExists(m.duplicateTarget)) {
 		m.message = "duplicate destination already exists or is empty"
 		return nil
 	}
 	cmd := m.editor.Save()
 	m.message = m.editor.Validation()
+	if cmd != nil {
+		m.saving = true
+	}
 	return cmd
+}
+
+func (m *Model) commitEditorField() {
+	if m.editor == nil || !m.fieldDraftDirty {
+		return
+	}
+	if m.duplicateFlow && m.editorField == 7 {
+		m.duplicateTarget = m.fieldDraft
+		selection := m.editor.Selection()
+		selection.RequestID = m.duplicateTarget
+		selection.CreateOnly = true
+		m.editor.SetSelection(selection)
+	} else {
+		m.editor.SetFieldText(m.editorField, m.fieldDraft)
+	}
+	m.fieldDraftDirty = false
 }
 
 func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
@@ -511,46 +533,64 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		m.mode = browseMode
 		return nil
 	}
+	if m.saving {
+		return nil
+	}
 	switch key.Type {
 	case tea.KeyEsc:
-		if m.editor.Dirty() {
-			m.prompt = &confirmation{kind: confirmDirtyNavigation, targetIndex: m.currentRequestIndex()}
+		if m.editor.Dirty() || m.fieldDraftDirty {
+			m.prompt = &confirmation{kind: confirmDirtyNavigation, targetID: m.editor.Selection().RequestID}
 			return nil
 		}
 		m.discardEdits()
 	case tea.KeyTab, tea.KeyEnter:
+		m.commitEditorField()
 		fieldCount := 7
 		if m.duplicateFlow {
 			fieldCount = 8
 		}
 		m.editorField = (m.editorField + 1) % fieldCount
+		m.fieldDraft = m.editorFieldText()
+		m.fieldDraftDirty = false
 		m.replaceField = true
-	case tea.KeyUp:
-		m.requestNavigation(-1)
-	case tea.KeyDown:
-		m.requestNavigation(1)
+	case tea.KeyUp, tea.KeyDown:
+		m.commitEditorField()
+		if key.Type == tea.KeyUp {
+			m.requestNavigation(-1)
+		} else {
+			m.requestNavigation(1)
+		}
 	case tea.KeyCtrlS:
 		return m.Save()
 	case tea.KeyCtrlZ:
+		m.commitEditorField()
 		m.editor.Undo()
+		m.fieldDraft = m.editor.FieldText(m.editorField)
 	case tea.KeyCtrlY:
+		m.commitEditorField()
 		m.editor.Redo()
+		m.fieldDraft = m.editor.FieldText(m.editorField)
 	case tea.KeyCtrlB:
+		m.commitEditorField()
 		mode := BodyModeRaw
 		if m.editor.mode == BodyModeRaw {
 			mode = BodyModeJSON
 		}
 		m.editor.SwitchBodyMode(mode)
+		m.fieldDraft = m.editor.FieldText(m.editorField)
 		m.message = m.editor.Validation()
 	case tea.KeyCtrlP:
+		m.commitEditorField()
 		m.prompt = &confirmation{kind: commandPalette}
 	case tea.KeyCtrlU:
-		m.setEditorFieldText("")
+		m.fieldDraft = ""
+		m.fieldDraftDirty = true
 		m.replaceField = false
 	case tea.KeyBackspace:
 		value := []rune(m.editorFieldText())
 		if len(value) > 0 {
-			m.setEditorFieldText(string(value[:len(value)-1]))
+			m.fieldDraft = string(value[:len(value)-1])
+			m.fieldDraftDirty = true
 		}
 		m.replaceField = false
 	case tea.KeyRunes:
@@ -559,7 +599,8 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		if m.replaceField {
 			value = ""
 		}
-		m.setEditorFieldText(value + text)
+		m.fieldDraft = value + text
+		m.fieldDraftDirty = true
 		m.replaceField = false
 	}
 	return nil
@@ -578,6 +619,7 @@ func (m Model) currentRequestIndex() int {
 }
 
 func (m *Model) handleRequestSaved(msg requestSavedMsg) tea.Cmd {
+	m.saving = false
 	if msg.err != nil {
 		m.message = msg.err.Error()
 		return nil
@@ -589,28 +631,35 @@ func (m *Model) handleRequestSaved(msg requestSavedMsg) tea.Cmd {
 	}
 	m.view = view
 	m.selectedID = msg.selection.RequestID
+	wasDuplicate := m.duplicateFlow
 	if m.editor == nil {
 		m.beginEdit(msg.selection.RequestID)
 	} else {
 		m.editor.Load(msg.request)
 	}
-	m.editor.SetSelection(msg.selection)
+	savedSelection := msg.selection
+	savedSelection.CreateOnly = false
+	m.editor.SetSelection(savedSelection)
+	if wasDuplicate {
+		m.editorField = 0
+	}
+	m.fieldDraft = m.editor.FieldText(m.editorField)
+	m.fieldDraftDirty = false
+	m.replaceField = true
 	m.message = "Saved " + msg.selection.RequestID
 	if m.duplicateFlow {
 		m.duplicateFlow, m.duplicateTarget = false, ""
 	}
 	if m.prompt != nil && m.prompt.kind == confirmDirtyNavigation && m.prompt.saving {
-		target := m.prompt.targetIndex
+		target := m.prompt.targetID
 		m.prompt = nil
-		ids := m.view.Tree.RequestIDs
-		if target >= 0 && target < len(ids) {
-			m.beginEdit(ids[target])
-		}
+		m.beginEdit(target)
 	}
 	return nil
 }
 
 func (m *Model) handleDeleteFinished(msg deleteFinishedMsg) {
+	m.saving = false
 	if msg.err != nil {
 		m.message = msg.err.Error()
 		return
@@ -628,20 +677,9 @@ func (m *Model) handleDeleteFinished(msg deleteFinishedMsg) {
 	m.clampTreeIndex()
 }
 
-func (m *Model) editorFieldText() string {
-	if m.duplicateFlow && m.editorField == 7 {
-		return m.duplicateTarget
-	}
-	return m.editor.FieldText(m.editorField)
-}
+func (m *Model) editorFieldText() string { return m.fieldDraft }
 
 func (m *Model) setEditorFieldText(value string) {
-	if m.duplicateFlow && m.editorField == 7 {
-		m.duplicateTarget = value
-		selection := m.editor.Selection()
-		selection.RequestID = value
-		m.editor.SetSelection(selection)
-		return
-	}
-	m.editor.SetFieldText(m.editorField, value)
+	m.fieldDraft = value
+	m.fieldDraftDirty = true
 }
