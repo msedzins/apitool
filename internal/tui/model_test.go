@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
 	"strings"
 	"testing"
 	"time"
@@ -230,4 +231,29 @@ func containsAll(value string, wants ...string) bool {
 		}
 	}
 	return true
+}
+
+func TestInvalidRequestCanBeOpenedAndRepaired(t *testing.T) {
+	m := tui.New(ui002FixtureService(t), tui.Options{StartingCollection: "users"})
+	for range 30 {
+		if strings.Contains(m.View(), "> ! broken (warning)") {
+			break
+		}
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if !strings.Contains(m.View(), "Request editor") {
+		t.Fatalf("invalid request did not open in editor: %q", m.View())
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://repaired.example.test")})
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	if cmd == nil {
+		t.Fatalf("repair save was not issued: %s", m.View())
+	}
+	m, _ = m.Update(cmd())
+	if strings.Contains(m.View(), "! broken (warning)") || !strings.Contains(m.View(), "https://repaired.example.test") {
+		t.Fatalf("saved repair was not reflected in collection view: %q", m.View())
+	}
 }

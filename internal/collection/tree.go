@@ -49,6 +49,7 @@ type RequestNode struct {
 type InvalidNode struct {
 	ID          string
 	Path        string
+	Request     *model.Request
 	Diagnostics []model.Diagnostic
 }
 
@@ -149,6 +150,10 @@ func BuildTree(collectionRoot string) (Tree, []model.Diagnostic) {
 			for _, diagnostic := range requestDiagnostics {
 				addInvalid(&tree, id, path, diagnostic)
 			}
+			invalid := tree.Invalid[id]
+			requestCopy := request
+			invalid.Request = &requestCopy
+			tree.Invalid[id] = invalid
 			return nil
 		}
 		requests = append(requests, loadedRequest{id: id, path: path, request: request})

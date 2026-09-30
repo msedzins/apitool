@@ -141,3 +141,11 @@ func assertSnapshot(t *testing.T, got, path string) {
 		t.Fatalf("snapshot mismatch:\n%s", lineDiff(string(want), got))
 	}
 }
+
+func TestUI015KeyboardHelpDocumentsRequestEditing(t *testing.T) {
+	model := tui.New(fixtureService(t), tui.Options{})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if got := model.View(); !strings.Contains(got, "Request     e edit selected request") {
+		t.Fatalf("keyboard help = %q, want request editor shortcut", got)
+	}
+}

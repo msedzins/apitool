@@ -2,9 +2,12 @@
 package collection
 
 import (
+	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,9 +59,17 @@ func LoadEnvironment(path string) (model.Environment, error) {
 
 // LoadRequest reads a request, accepting auth: none and either supported scope form.
 func LoadRequest(path string) (model.Request, error) {
-	var document requestDocument
-	if err := loadYAML(path, &document); err != nil {
+	data, err := os.ReadFile(path)
+	if err != nil {
 		return model.Request{}, err
+	}
+	var document requestDocument
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return model.Request{}, fmt.Errorf("decode YAML: %w", err)
+	}
+	requestConfig, err := decodeRequestConfig(document.Request)
+	if err != nil {
+		return model.Request{}, fmt.Errorf("decode request body: %w", err)
 	}
 
 	auth, err := decodeAuth(document.Auth)
@@ -72,7 +83,7 @@ func LoadRequest(path string) (model.Request, error) {
 	return model.Request{
 		Name:    document.Name,
 		Method:  strings.ToUpper(document.Method),
-		Request: document.Request,
+		Request: requestConfig,
 		Auth:    auth,
 	}, nil
 }
@@ -122,10 +133,224 @@ func SaveRequest(path string, request model.Request) error {
 }
 
 type requestDocument struct {
-	Name    string              `yaml:"name"`
-	Method  string              `yaml:"method"`
-	Request model.RequestConfig `yaml:"request"`
-	Auth    yaml.Node           `yaml:"auth,omitempty"`
+	Name    string                `yaml:"name"`
+	Method  string                `yaml:"method"`
+	Request requestConfigDocument `yaml:"request"`
+	Auth    yaml.Node             `yaml:"auth,omitempty"`
+}
+type requestConfigDocument struct {
+	URL     string            `yaml:"url"`
+	Params  map[string]string `yaml:"params,omitempty"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Body    *bodyDocument     `yaml:"body,omitempty"`
+}
+type bodyDocument struct {
+	Type    string    `yaml:"type"`
+	Content yaml.Node `yaml:"content"`
+}
+
+func decodeRequestConfig(document requestConfigDocument) (model.RequestConfig, error) {
+	config := model.RequestConfig{URL: document.URL, Params: document.Params, Headers: document.Headers}
+	if document.Body == nil {
+		return config, nil
+	}
+	content, err := decodeBodyNode(&document.Body.Content)
+	if err != nil {
+		return model.RequestConfig{}, err
+	}
+	config.Body = &model.Body{Type: document.Body.Type, Content: content}
+	return config, nil
+}
+func decodeBodyNode(node *yaml.Node) (any, error) {
+	return decodeBodyNodeVisited(node, map[*yaml.Node]bool{})
+}
+func decodeBodyNodeVisited(node *yaml.Node, stack map[*yaml.Node]bool) (any, error) {
+	if node == nil || node.Kind == 0 {
+		return nil, nil
+	}
+	if stack[node] {
+		return nil, fmt.Errorf("cyclic YAML alias in JSON body")
+	}
+	stack[node] = true
+	defer delete(stack, node)
+	if node.Kind == yaml.AliasNode {
+		return decodeBodyNodeVisited(node.Alias, stack)
+	}
+	switch node.Kind {
+	case yaml.MappingNode:
+		result := make(map[string]any, len(node.Content)/2)
+		var mergeNodes []*yaml.Node
+		seenKeys := map[string]bool{}
+		for index := 0; index < len(node.Content); index += 2 {
+			key, value := node.Content[index], node.Content[index+1]
+			if key.Tag == "!!merge" {
+				mergeNodes = append(mergeNodes, value)
+				continue
+			}
+			if key.Tag != "!!str" {
+				return nil, fmt.Errorf("JSON body object keys must be strings")
+			}
+			if seenKeys[key.Value] {
+				return nil, fmt.Errorf("duplicate JSON body key %q", key.Value)
+			}
+			seenKeys[key.Value] = true
+		}
+		for _, mergeNode := range mergeNodes {
+			merged, err := decodeBodyNodeVisited(mergeNode, stack)
+			if err != nil {
+				return nil, err
+			}
+			maps := []map[string]any{}
+			switch value := merged.(type) {
+			case map[string]any:
+				maps = append(maps, value)
+			case []any:
+				for _, item := range value {
+					mapping, ok := item.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("YAML merge sequence must contain mappings")
+					}
+					maps = append(maps, mapping)
+				}
+			default:
+				return nil, fmt.Errorf("YAML merge value must be a mapping or sequence of mappings")
+			}
+			for _, mapping := range maps {
+				for key, value := range mapping {
+					if _, exists := result[key]; !exists {
+						result[key] = value
+					}
+				}
+			}
+		}
+		for index := 0; index < len(node.Content); index += 2 {
+			key, valueNode := node.Content[index], node.Content[index+1]
+			if key.Tag == "!!merge" {
+				continue
+			}
+			value, err := decodeBodyNodeVisited(valueNode, stack)
+			if err != nil {
+				return nil, err
+			}
+			result[key.Value] = value
+		}
+		return result, nil
+	case yaml.SequenceNode:
+		result := make([]any, len(node.Content))
+		for index, child := range node.Content {
+			value, err := decodeBodyNodeVisited(child, stack)
+			if err != nil {
+				return nil, err
+			}
+			result[index] = value
+		}
+		return result, nil
+	case yaml.ScalarNode:
+		switch node.Tag {
+		case "!!str":
+			return node.Value, nil
+		case "!!null":
+			return nil, nil
+		case "!!bool":
+			var value bool
+			if err := node.Decode(&value); err != nil {
+				return nil, err
+			}
+			return value, nil
+		case "!!int":
+			return decodeYAMLInteger(node.Value)
+		case "!!float":
+			return decodeYAMLFloat(node.Value)
+		case "!!timestamp":
+			var value time.Time
+			if err := node.Decode(&value); err != nil {
+				return nil, err
+			}
+			return value, nil
+		case "!!binary":
+			var value any
+			if err := node.Decode(&value); err != nil {
+				return nil, err
+			}
+			return value, nil
+		default:
+			return nil, fmt.Errorf("unsupported YAML scalar %s in JSON body", node.Tag)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported YAML node in JSON body")
+	}
+}
+func decodeYAMLInteger(raw string) (any, error) {
+	value := strings.ReplaceAll(raw, "_", "")
+	sign := 1
+	if strings.HasPrefix(value, "-") {
+		sign = -1
+		value = value[1:]
+	} else if strings.HasPrefix(value, "+") {
+		value = value[1:]
+	}
+	base := 10
+	switch {
+	case strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X"):
+		base, value = 16, value[2:]
+	case strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O"):
+		base, value = 8, value[2:]
+	case strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B"):
+		base, value = 2, value[2:]
+	case len(value) > 1 && value[0] == '0':
+		base, value = 8, value[1:]
+	}
+	number, ok := new(big.Int).SetString(value, base)
+	if !ok {
+		return nil, fmt.Errorf("invalid YAML integer %q", raw)
+	}
+	if sign < 0 {
+		number.Neg(number)
+	}
+	decimal := number.String()
+	if integer, err := strconv.ParseInt(decimal, 10, 64); err == nil {
+		return int(integer), nil
+	}
+	return model.JSONNumber(decimal), nil
+}
+func decodeYAMLFloat(raw string) (any, error) {
+	value := strings.ReplaceAll(raw, "_", "")
+	sign := ""
+	if strings.HasPrefix(value, "+") {
+		value = value[1:]
+	} else if strings.HasPrefix(value, "-") {
+		sign, value = "-", value[1:]
+	}
+	exponent := ""
+	if index := strings.IndexAny(value, "eE"); index >= 0 {
+		exponent, value = value[index:], value[:index]
+	}
+	before, after, hasDot := strings.Cut(value, ".")
+	if !hasDot {
+		after = ""
+	}
+	if before == "" {
+		before = "0"
+	}
+	trimmed := strings.TrimLeft(before, "0")
+	if trimmed != "" {
+		before = trimmed
+	} else {
+		before = "0"
+	}
+	if hasDot && after == "" {
+		after = "0"
+	}
+	canonical := sign + before
+	if hasDot {
+		canonical += "." + after
+	}
+	canonical += exponent
+	number := model.JSONNumber(canonical)
+	if _, err := json.Marshal(number); err != nil {
+		return nil, fmt.Errorf("unsupported YAML float %q in JSON body", raw)
+	}
+	return number, nil
 }
 
 type collectionDocument struct {
