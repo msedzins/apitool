@@ -27,7 +27,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 |---|---|---|
 | [T-001](#task-1-status) | Implemented | Reject unsupported collection/group authentication. |
 | [T-002](#task-2-status) | Implemented | Discovery and inherited diagnostics reviewed; execution enforcement is tracked in Task 6. |
-| [T-003](#task-3-status) | Needs corrections | Validate effective inherited auth before execution. |
+| [T-003](#task-3-status) | In progress | Validate effective inherited auth before execution. |
 | [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
 | [T-005](#task-5-status) | Needs corrections | Prevent collisions between nested cache identities. |
 | [T-006](#task-6-status) | Needs corrections | Protect request writes; block invalid ancestors; surface storage failures. |
@@ -270,7 +270,7 @@ git commit -m "feat: discover collections and request trees"
 <a id="task-3-status"></a>
 ### Task 3: Resolve environments, inheritance, and effective configuration
 
-**Status:** Needs corrections
+**Status:** In progress
 
 **Files:**
 - Create: `internal/resolve/effective.go`
@@ -334,10 +334,10 @@ git commit -m "feat: resolve environments and inherited configuration"
 
 Files: `internal/resolve/effective.go`, `internal/resolve/effective_test.go`.
 
-- [ ] Write `TestEffectiveRejectsUnsupportedInheritedAuth` with collection and nearest-group configurations; assert diagnostics for unsupported type/grant and missing required OAuth values, without revealing resolved credentials. Cover request `auth: none` disabling valid inherited OAuth.
-- [ ] Run `go test ./internal/resolve -run TestEffectiveRejectsUnsupportedInheritedAuth`; confirm FAIL before the correction.
-- [ ] Validate selected effective auth structurally and after resolution. Use resolved-value validation that permits a resolved secret in memory, rather than applying the definition-only secret-reference rule to it. Preserve nearest-setting precedence.
-- [ ] Run `go test ./internal/resolve ./internal/validate`; require PASS. Task 6 must refuse execution when these diagnostics are returned.
+- [x] Write `TestEffectiveRejectsUnsupportedInheritedAuth` with collection and nearest-group configurations; assert diagnostics for unsupported type/grant and missing required OAuth values, without revealing resolved credentials. Cover request `auth: none` disabling valid inherited OAuth.
+- [x] Run `go test ./internal/resolve -run TestEffectiveRejectsUnsupportedInheritedAuth`; confirm FAIL before the correction.
+- [x] Validate selected effective auth structurally and after resolution. Use resolved-value validation that permits a resolved secret in memory, rather than applying the definition-only secret-reference rule to it. Preserve nearest-setting precedence.
+- [x] Run `go test ./internal/resolve ./internal/validate`; require PASS. Task 6 must refuse execution when these diagnostics are returned.
 - [ ] Review and commit the correction before marking this task Implemented.
 
 

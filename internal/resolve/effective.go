@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"apitool/internal/model"
+	"apitool/internal/validate"
 )
 
 // Effective resolves environment and process placeholders, then applies HTTP and
@@ -33,6 +34,8 @@ func Effective(collection model.Collection, environment model.Environment, group
 		Headers: resolveMap(request.Request.Headers, "request.headers", resolve),
 		Auth:    resolveAuth(selectAuth(collection.Auth, groups, request.Auth), resolve),
 	}
+	effectiveAuthDiagnostics := validate.AuthResolved(effective.Auth)
+	diagnostics = append(diagnostics, effectiveAuthDiagnostics...)
 
 	effective.Body = resolveBody(request.Request.Body, resolve, &diagnostics)
 	effective.Timeout, effective.InsecureSkipVerify = resolveHTTP(collection.HTTP, environment.HTTP, &diagnostics)
