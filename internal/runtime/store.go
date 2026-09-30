@@ -2,6 +2,9 @@
 package runtime
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,10 +104,21 @@ func (s *Store) LatestResponse(key Key) (model.Response, error) {
 	if err != nil {
 		return model.Response{}, err
 	}
-	defer unix.Close(dirFD)
 	data, err := readFileAt(dirFD, "latest.json")
+	unix.Close(dirFD)
 	if errors.Is(err, fs.ErrNotExist) {
-		return model.Response{}, ErrNotFound
+		legacyFD, legacyErr := s.legacyResponseDir(key)
+		if errors.Is(legacyErr, fs.ErrNotExist) {
+			return model.Response{}, ErrNotFound
+		}
+		if legacyErr != nil {
+			return model.Response{}, fmt.Errorf("open legacy response cache path: %w", legacyErr)
+		}
+		data, err = readFileAt(legacyFD, "latest.json")
+		unix.Close(legacyFD)
+		if errors.Is(err, fs.ErrNotExist) {
+			return model.Response{}, ErrNotFound
+		}
 	}
 	if err != nil {
 		return model.Response{}, fmt.Errorf("read response cache: %w", err)
@@ -223,19 +237,54 @@ func (s *Store) responseDir(key Key) (int, error) {
 	if err != nil {
 		return -1, err
 	}
+	segments = append(segments, ".key-"+cacheIdentity(key))
+	return s.openResponseDir(segments, true)
+}
+
+func (s *Store) legacyResponseDir(key Key) (int, error) {
+	segments, err := key.segments()
+	if err != nil {
+		return -1, err
+	}
+	return s.openResponseDir(segments, false)
+}
+
+func (s *Store) openResponseDir(segments []string, create bool) (int, error) {
 	dirFD, err := unix.Dup(s.rootFD)
 	if err != nil {
 		return -1, fmt.Errorf("duplicate runtime directory: %w", err)
 	}
 	for _, part := range append([]string{"responses"}, segments...) {
-		nextFD, err := openOrCreateDirAt(dirFD, part)
+		var nextFD int
+		if create {
+			nextFD, err = openOrCreateDirAt(dirFD, part)
+		} else {
+			nextFD, err = unix.Openat(dirFD, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+			if errors.Is(err, unix.ENOENT) {
+				err = fs.ErrNotExist
+			}
+		}
 		unix.Close(dirFD)
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return -1, fs.ErrNotExist
+			}
 			return -1, fmt.Errorf("open response cache path: %w", err)
 		}
 		dirFD = nextFD
 	}
 	return dirFD, nil
+}
+
+func cacheIdentity(key Key) string {
+	hash := sha256.New()
+	for _, part := range []string{key.CollectionPath, key.Environment, key.RequestID} {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(part)))
+		_, _ = hash.Write(length[:])
+		_, _ = hash.Write([]byte(part))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func (k Key) segments() ([]string, error) {

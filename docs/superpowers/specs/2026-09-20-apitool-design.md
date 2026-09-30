@@ -219,13 +219,13 @@ All runtime state is stored under one visible, workspace-local directory:
 
 ```text
 <workspace-root>/.apitool/
-├── responses/<collection-path>/<environment>/<request-id>/latest.json
+├── responses/<collection-path>/<environment>/<request-id>/.key-<sha256-identity>/latest.json
 ├── history.jsonl
 ├── state.json
 └── logs/
 ```
 
-`.apitool/` is mandatory in the workspace root `.gitignore`; it is never added, staged, committed, displayed in application Git diffs, or shared by Git. `state.json` contains only non-secret UI/session preferences, including the last active environment per collection. The collection path, environment, and request ID in the cache layout prevent collisions between requests with the same relative name.
+`.apitool/` is mandatory in the workspace root `.gitignore`; it is never added, staged, committed, displayed in application Git diffs, or shared by Git. `state.json` contains only non-secret UI/session preferences, including the last active environment per collection. The collection path, environment, and request ID in the cache layout prevent collisions between requests with the same relative name. Each new cache write adds a `.key-<sha256-identity>` directory derived from a length-prefixed tuple of those three exact identity fields, so nested path boundaries cannot collide. Readers may fall back to the legacy path only when the cached record metadata exactly matches the requested identity.
 
 ### Response cache
 
