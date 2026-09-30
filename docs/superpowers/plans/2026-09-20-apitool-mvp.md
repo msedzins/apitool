@@ -32,8 +32,8 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-005](#task-5-status) | Implemented | Prevent collisions between nested cache identities. |
 | [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
 | [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
-| [T-008](#task-8-status) | In progress | Fix editor focus and mode-aware mouse routing. |
-| [T-009](#task-9-status) | In progress | Add structured JSON editing; fix literal input and invalid-draft undo. |
+| [T-008](#task-8-status) | Implemented | Editor focus and mode-aware mouse routing verified. |
+| [T-009](#task-9-status) | Implemented | Structured JSON editing and recoverable drafts verified. |
 | [T-010](#task-10-status) | Planned | Send workflow and response/diagnostic/token views. |
 | [T-011](#task-11-status) | Planned | History, Git palette, split resizing and user documentation. |
 | [T-012](#task-12-status) | Planned | Assembled end-to-end verification. |
@@ -634,7 +634,7 @@ Files: `internal/git/repository.go`, `internal/git/repository_test.go`.
 <a id="task-8-status"></a>
 ### Task 8: Bubble Tea shell, collection navigation, and accessible status presentation
 
-**Status:** In progress
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/model.go`
@@ -703,13 +703,13 @@ Files: `internal/tui/navigation.go`, `internal/tui/model_test.go`, `internal/tui
 - [x] Run `go test ./internal/tui -run 'Test(EditorOpenMovesFocusToRequestPane|MouseSelectsEditorField)'`; confirm FAIL before the correction.
 - [x] Set request focus when entering edit mode and use mode-aware hit testing that matches the rendered editor, picker and pane boundaries. Keep dirty-navigation interception on request changes and retain help's input blocking.
 - [x] Run `go test ./internal/tui`; require PASS at 100×30 and 80×24 with color disabled, preserving existing approved navigation/help baselines.
-- [ ] Review and commit. Request/response split resizing stays in Task 11.
+- [x] Review and commit. Request/response split resizing stays in Task 11.
 
 
 <a id="task-9-status"></a>
 ### Task 9: Request editor, structured/raw body modes, save prompts, undo/redo, duplicate, and delete
 
-**Status:** In progress
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/editor.go`
@@ -778,7 +778,7 @@ Files: `internal/tui/editor.go`, `internal/tui/navigation.go`, `internal/tui/vie
 - [x] Write `TestStructuredJSONEditsNestedValues` for keyboard editing of object fields, array elements and scalar types, then Save; assert serialized JSON values and large integer precision. Include JSON text fallback and exact raw-body preservation. Run `go test ./internal/tui -run TestStructuredJSONEditsNestedValues`; confirm FAIL.
 - [x] Add structured JSON controls as the default JSON presentation, with a text presentation of the same JSON value. Keep JSON presentation switches distinct from changing payload type to Raw. Expose explicit formatting and safe parser feedback; unsupported text remains recoverable rather than silently discarded.
 - [x] Run `go test ./internal/tui ./internal/collection`; require PASS. Obtain review of requirement-derived editor layouts before promoting new visual baselines; do not treat the draft gallery's disputed behaviors as approved.
-- [ ] Review and commit each correction. Update editor help and future implementation interfaces as required; actual sending remains Task 10.
+- [x] Review and commit each correction. Update editor help and future implementation interfaces as required; actual sending remains Task 10.
 
 
 <a id="task-10-status"></a>
