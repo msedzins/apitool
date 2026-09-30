@@ -126,6 +126,34 @@ func TestCtrlEOpensEnvironmentPicker(t *testing.T) {
 	}
 }
 
+func TestPickerMouseHitTestingAndOutsideClicks(t *testing.T) {
+	m := tui.New(fixtureService(t), tui.Options{})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	// The collection entries are rendered at rows 9, 12, ... in the right panel.
+	m, _ = m.Update(tea.MouseMsg{X: 45, Y: 12, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if !strings.Contains(m.View(), "> payments") {
+		t.Fatalf("collection click did not select payments: %q", m.View())
+	}
+	selected := m.View()
+	m, _ = m.Update(tea.MouseMsg{X: 45, Y: 20, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if m.View() != selected {
+		t.Fatal("click outside collection picker controls changed selection")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	// Environment names are sorted (prod, test) and displayed on rows 1 and 2.
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 1, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if !strings.Contains(m.View(), "> prod") {
+		t.Fatalf("environment click did not select prod: %q", m.View())
+	}
+	selected = m.View()
+	m, _ = m.Update(tea.MouseMsg{X: 10, Y: 10, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	if m.View() != selected {
+		t.Fatal("click outside environment picker controls changed selection")
+	}
+}
+
 func TestOptionsStartingEnvironmentSelectsEnvironment(t *testing.T) {
 	m := tui.New(fixtureService(t), tui.Options{StartingCollection: "payments", StartingEnvironment: "prod"})
 	if got := m.View(); !containsAll(got, "Collection: payments", "Environment: prod") {

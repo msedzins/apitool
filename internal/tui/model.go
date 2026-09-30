@@ -67,11 +67,24 @@ type Model struct {
 	fieldDraft                                   string
 	fieldDraftDirty                              bool
 	fieldCursor                                  int
+	draftUndo, draftRedo                         []fieldDraftSnapshot
+	jsonTextPresentation                         bool
+	jsonCursor                                   int
+	jsonScalarDraft                              string
+	jsonScalarDirty                              bool
 	bodyScroll                                   int
 	saving                                       bool
 	prompt                                       *confirmation
 	duplicateFlow                                bool
 	duplicateTarget                              string
+}
+
+type fieldDraftSnapshot struct {
+	field   int
+	text    string
+	cursor  int
+	dirty   bool
+	replace bool
 }
 
 // New creates a shell around a workspace already opened by service.

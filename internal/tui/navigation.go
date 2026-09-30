@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -55,10 +56,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.prompt != nil {
 			return m, m.handleConfirmation(x)
-		}
-		if m.mode == requestEditMode && x.Type == tea.KeyRunes && string(x.Runes) == "?" {
-			m.help = true
-			return m, nil
 		}
 		if m.mode == requestEditMode {
 			return m, m.handleEditorKey(x)
@@ -271,6 +268,21 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 	if x.Action != tea.MouseActionPress || x.Button != tea.MouseButtonLeft {
 		return
 	}
+	switch m.mode {
+	case requestEditMode:
+		m.handleEditorMouse(x)
+		return
+	case collectionPickerMode:
+		m.handleCollectionPickerMouse(x)
+		return
+	case environmentPickerMode:
+		m.handleEnvironmentPickerMouse(x)
+		return
+	}
+	m.handleBrowseMouse(x)
+}
+
+func (m *Model) handleBrowseMouse(x tea.MouseMsg) {
 	if x.X < m.explorerWidth() {
 		m.focus = collectionPane
 		row := -1
@@ -294,6 +306,75 @@ func (m *Model) handleMouse(x tea.MouseMsg) {
 		m.focus = responsePane
 	} else {
 		m.focus = requestPane
+	}
+}
+
+func (m *Model) handleEditorMouse(x tea.MouseMsg) {
+	if m.editor == nil || x.X <= m.explorerWidth() {
+		return
+	}
+	if m.height > 0 && m.height < 22 {
+		// Compact editor rows mirror editorDisplay: heading, then fields.
+		field := x.Y - 1
+		if field < 0 || field > 6 {
+			return
+		}
+		m.selectEditorField(field)
+		return
+	}
+	if x.Y >= 4 && x.Y <= 9 {
+		m.selectEditorField(x.Y - 4)
+		return
+	}
+	if x.Y >= 10 && x.Y <= 15 {
+		m.selectEditorField(6)
+		return
+	}
+	if m.duplicateFlow && x.Y == 16 {
+		m.selectEditorField(7)
+	}
+}
+
+func (m *Model) selectEditorField(field int) {
+	if !m.commitEditorField() {
+		return
+	}
+	m.focus = requestPane
+	m.editorField = field
+	m.fieldDraft = m.editor.FieldText(field)
+	if m.duplicateFlow && field == 7 {
+		m.fieldDraft = m.duplicateTarget
+	}
+	m.fieldDraftDirty = false
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	m.replaceField = false
+}
+
+func (m *Model) handleCollectionPickerMouse(x tea.MouseMsg) {
+	if x.X < m.explorerWidth()+1 {
+		return
+	}
+	// Collection picker entries occupy their label row every three lines,
+	// starting at row 9 in the rendered picker panel.
+	if x.Y < 9 || (x.Y-9)%3 != 0 {
+		return
+	}
+	index := (x.Y - 9) / 3
+	if index >= 0 && index < len(m.collections) {
+		m.collectionIndex = index
+	}
+}
+
+func (m *Model) handleEnvironmentPickerMouse(x tea.MouseMsg) {
+	if x.X < 0 || x.X >= m.width || x.Y < 1 {
+		return
+	}
+	row := x.Y - 1
+	if m.message != "" {
+		row--
+	}
+	if row >= 0 && row < len(m.environmentNames()) {
+		m.environmentIndex = row
 	}
 }
 func (m *Model) syncViewport() {
@@ -492,12 +573,13 @@ func (m *Model) beginEdit(id string) {
 	}
 	m.selectedID = id
 	m.editor = newRequestEditor(m.service, app.Selection{Collection: m.collection, Environment: m.view.Environment, RequestID: id}, definition)
-	m.mode, m.editorField, m.replaceField = requestEditMode, 0, true
+	m.mode, m.focus, m.editorField, m.replaceField = requestEditMode, requestPane, 0, true
 	m.fieldDraft = m.editor.FieldText(0)
 	m.fieldDraftDirty = false
 	m.fieldCursor = len([]rune(m.fieldDraft))
 	m.bodyScroll = 0
 	m.duplicateFlow, m.duplicateTarget = false, ""
+	m.draftUndo, m.draftRedo = nil, nil
 	if ok {
 		m.message = ""
 	}
@@ -592,6 +674,17 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 	if m.saving {
 		return nil
 	}
+	structuredJSON := m.editorField == 6 && m.editor.mode == BodyModeJSON && !m.jsonTextPresentation
+	if structuredJSON && m.jsonScalarDirty && key.Type == tea.KeyUp {
+		m.commitJSONScalar()
+		m.jsonCursor = max(0, m.jsonCursor-1)
+		return nil
+	}
+	if structuredJSON && m.jsonScalarDirty && key.Type == tea.KeyDown {
+		m.commitJSONScalar()
+		m.jsonCursor++
+		return nil
+	}
 	switch key.Type {
 	case tea.KeyEsc:
 		if m.editor.Dirty() || m.fieldDraftDirty {
@@ -600,6 +693,7 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		}
 		m.discardEdits()
 	case tea.KeyTab:
+		m.commitJSONScalar()
 		fieldCount := 7
 		if m.duplicateFlow {
 			fieldCount = 8
@@ -627,7 +721,16 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		}
 	case tea.KeyUp, tea.KeyDown:
 		if m.editorField == 6 {
-			m.moveBodyCursorVertical(key.Type == tea.KeyDown)
+			if structuredJSON {
+				if key.Type == tea.KeyDown {
+					m.jsonCursor++
+				} else {
+					m.jsonCursor = max(0, m.jsonCursor-1)
+				}
+				m.jsonScalarDirty = false
+			} else {
+				m.moveBodyCursorVertical(key.Type == tea.KeyDown)
+			}
 		} else {
 			if !m.commitEditorField() {
 				return nil
@@ -661,12 +764,22 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 	case tea.KeyDelete:
 		runes := []rune(m.fieldDraft)
 		if m.fieldCursor < len(runes) {
+			m.pushFieldDraftUndo()
 			m.fieldDraft = string(runes[:m.fieldCursor]) + string(runes[m.fieldCursor+1:])
 			m.fieldDraftDirty = true
 		}
 	case tea.KeyCtrlS:
+		m.commitJSONScalar()
 		return m.Save()
 	case tea.KeyCtrlZ:
+		if structuredJSON && m.jsonScalarDirty {
+			m.jsonScalarDraft = ""
+			m.jsonScalarDirty = false
+			return nil
+		}
+		if m.undoFieldDraft() {
+			return nil
+		}
 		if !m.commitEditorField() {
 			return nil
 		}
@@ -674,6 +787,9 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		m.fieldDraft = m.editor.FieldText(m.editorField)
 		m.fieldCursor = len([]rune(m.fieldDraft))
 	case tea.KeyCtrlY:
+		if m.redoFieldDraft() {
+			return nil
+		}
 		if !m.commitEditorField() {
 			return nil
 		}
@@ -692,19 +808,51 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 		m.fieldDraft = m.editor.FieldText(m.editorField)
 		m.fieldCursor = len([]rune(m.fieldDraft))
 		m.message = m.editor.Validation()
+	case tea.KeyCtrlJ:
+		if m.editor.mode == BodyModeJSON {
+			m.commitJSONScalar()
+			m.jsonTextPresentation = !m.jsonTextPresentation
+			m.jsonScalarDirty = false
+			m.message = ""
+		}
+	case tea.KeyCtrlF:
+		if m.editor.mode == BodyModeJSON {
+			value, err := decodeJSONValue(m.editor.bodyText)
+			if err != nil {
+				m.editor.validation = "invalid JSON body: " + err.Error()
+				m.message = m.editor.validation
+			} else if data, marshalErr := json.MarshalIndent(value, "", "  "); marshalErr != nil {
+				m.editor.validation = "JSON body cannot be formatted"
+				m.message = m.editor.validation
+			} else {
+				m.editor.SetBodyText(string(data))
+				m.message = "JSON formatted"
+			}
+		}
 	case tea.KeyCtrlP:
 		if !m.commitEditorField() {
 			return nil
 		}
 		m.prompt = &confirmation{kind: commandPalette}
 	case tea.KeyCtrlU:
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarDraft = ""
+			m.jsonScalarDirty = true
+			return nil
+		}
+		m.pushFieldDraftUndo()
 		m.fieldDraft = ""
 		m.fieldCursor = 0
 		m.fieldDraftDirty = true
 		m.replaceField = false
 	case tea.KeyEnter:
 		if m.editorField == 6 {
-			m.insertDraftText("\n")
+			if structuredJSON {
+				m.commitJSONScalar()
+			} else {
+				m.insertDraftText("\n")
+			}
 		} else {
 			if !m.commitEditorField() {
 				return nil
@@ -717,29 +865,81 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 	case tea.KeyBackspace:
 		value := []rune(m.fieldDraft)
 		if m.replaceField {
+			m.pushFieldDraftUndo()
 			m.fieldDraft = ""
 			m.fieldCursor = 0
 		} else if m.fieldCursor > 0 {
+			m.pushFieldDraftUndo()
 			m.fieldDraft = string(value[:m.fieldCursor-1]) + string(value[m.fieldCursor:])
 			m.fieldCursor--
 		}
 		m.fieldDraftDirty = true
 		m.replaceField = false
 	case tea.KeyRunes:
-		if string(key.Runes) == "?" {
+		if string(key.Runes) == "?" && m.editorField < 0 {
 			m.help = true
 			return nil
 		}
-		m.insertDraftText(string(key.Runes))
+		if structuredJSON {
+			m.ensureJSONScalarDraft()
+			m.jsonScalarDraft += string(key.Runes)
+			m.jsonScalarDirty = true
+		} else {
+			m.insertDraftText(string(key.Runes))
+		}
 	}
 	return nil
+}
+
+func (m *Model) ensureJSONScalarDraft() {
+	if m.jsonScalarDirty {
+		return
+	}
+	scalars, err := jsonScalars(m.editor.bodyText)
+	if err != nil || len(scalars) == 0 {
+		return
+	}
+	if m.jsonCursor >= len(scalars) {
+		m.jsonCursor = len(scalars) - 1
+	}
+	if m.jsonCursor < 0 {
+		m.jsonCursor = 0
+	}
+	m.jsonScalarDraft = formatJSONScalar(scalars[m.jsonCursor].value)
+	if text, ok := scalars[m.jsonCursor].value.(string); ok {
+		m.jsonScalarDraft = text
+	}
+}
+
+func (m *Model) commitJSONScalar() {
+	if !m.jsonScalarDirty || m.editor == nil {
+		return
+	}
+	scalars, err := jsonScalars(m.editor.bodyText)
+	if err != nil || m.jsonCursor < 0 || m.jsonCursor >= len(scalars) {
+		m.editor.validation = "invalid JSON body: " + fmt.Sprint(err)
+		return
+	}
+	text, err := setJSONScalar(m.editor.bodyText, scalars[m.jsonCursor].path, m.jsonScalarDraft)
+	if err != nil {
+		m.editor.validation = err.Error()
+		return
+	}
+	m.editor.SetBodyText(text)
+	m.jsonScalarDirty = false
+	m.jsonScalarDraft = ""
+	m.fieldDraft = m.editor.bodyText
+	m.editor.validation = ""
 }
 
 func (m *Model) insertDraftText(text string) {
 	runes := []rune(m.fieldDraft)
 	if m.replaceField {
+		m.pushFieldDraftUndo()
 		runes = nil
 		m.fieldCursor = 0
+	} else {
+		m.pushFieldDraftUndo()
 	}
 	if m.fieldCursor < 0 {
 		m.fieldCursor = 0
@@ -766,8 +966,41 @@ func (m *Model) moveBodyCursorLineEdge(end bool) {
 	if end {
 		m.fieldCursor = finish
 	} else {
+		m.pushFieldDraftUndo()
 		m.fieldCursor = start
 	}
+}
+
+func (m *Model) pushFieldDraftUndo() {
+	m.draftUndo = append(m.draftUndo, fieldDraftSnapshot{field: m.editorField, text: m.fieldDraft, cursor: m.fieldCursor, dirty: m.fieldDraftDirty, replace: m.replaceField})
+	m.draftRedo = nil
+}
+
+func (m *Model) undoFieldDraft() bool {
+	if len(m.draftUndo) == 0 {
+		return false
+	}
+	m.draftRedo = append(m.draftRedo, fieldDraftSnapshot{field: m.editorField, text: m.fieldDraft, cursor: m.fieldCursor, dirty: m.fieldDraftDirty, replace: m.replaceField})
+	last := m.draftUndo[len(m.draftUndo)-1]
+	m.draftUndo = m.draftUndo[:len(m.draftUndo)-1]
+	m.restoreFieldDraft(last)
+	return true
+}
+
+func (m *Model) redoFieldDraft() bool {
+	if len(m.draftRedo) == 0 {
+		return false
+	}
+	m.draftUndo = append(m.draftUndo, fieldDraftSnapshot{field: m.editorField, text: m.fieldDraft, cursor: m.fieldCursor, dirty: m.fieldDraftDirty, replace: m.replaceField})
+	last := m.draftRedo[len(m.draftRedo)-1]
+	m.draftRedo = m.draftRedo[:len(m.draftRedo)-1]
+	m.restoreFieldDraft(last)
+	return true
+}
+
+func (m *Model) restoreFieldDraft(snapshot fieldDraftSnapshot) {
+	m.editorField, m.fieldDraft, m.fieldCursor = snapshot.field, snapshot.text, snapshot.cursor
+	m.fieldDraftDirty, m.replaceField = snapshot.dirty, snapshot.replace
 }
 func (m *Model) moveBodyCursorVertical(down bool) {
 	lines := strings.Split(m.fieldDraft, "\n")

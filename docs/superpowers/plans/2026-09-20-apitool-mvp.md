@@ -32,8 +32,8 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-005](#task-5-status) | Implemented | Prevent collisions between nested cache identities. |
 | [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
 | [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
-| [T-008](#task-8-status) | Needs corrections | Fix editor focus and mode-aware mouse routing. |
-| [T-009](#task-9-status) | Needs corrections | Add structured JSON editing; fix literal input and invalid-draft undo. |
+| [T-008](#task-8-status) | In progress | Fix editor focus and mode-aware mouse routing. |
+| [T-009](#task-9-status) | In progress | Add structured JSON editing; fix literal input and invalid-draft undo. |
 | [T-010](#task-10-status) | Planned | Send workflow and response/diagnostic/token views. |
 | [T-011](#task-11-status) | Planned | History, Git palette, split resizing and user documentation. |
 | [T-012](#task-12-status) | Planned | Assembled end-to-end verification. |
@@ -634,7 +634,7 @@ Files: `internal/git/repository.go`, `internal/git/repository_test.go`.
 <a id="task-8-status"></a>
 ### Task 8: Bubble Tea shell, collection navigation, and accessible status presentation
 
-**Status:** Needs corrections
+**Status:** In progress
 
 **Files:**
 - Create: `internal/tui/model.go`
@@ -699,17 +699,17 @@ git commit -m "feat: add collection navigation TUI"
 
 Files: `internal/tui/navigation.go`, `internal/tui/model_test.go`, `internal/tui/editor_test.go`, `internal/tui/view_test.go`.
 
-- [ ] Write `TestEditorOpenMovesFocusToRequestPane`: selecting a request and pressing `e` must mark the request pane active. Write `TestMouseSelectsEditorField`: clicking the displayed URL field must make subsequent input edit URL rather than Name. Cover collection/environment picker hit-testing and clicking outside controls.
-- [ ] Run `go test ./internal/tui -run 'Test(EditorOpenMovesFocusToRequestPane|MouseSelectsEditorField)'`; confirm FAIL before the correction.
-- [ ] Set request focus when entering edit mode and use mode-aware hit testing that matches the rendered editor, picker and pane boundaries. Keep dirty-navigation interception on request changes and retain help's input blocking.
-- [ ] Run `go test ./internal/tui`; require PASS at 100×30 and 80×24 with color disabled, preserving existing approved navigation/help baselines.
+- [x] Write `TestEditorOpenMovesFocusToRequestPane`: selecting a request and pressing `e` must mark the request pane active. Write `TestMouseSelectsEditorField`: clicking the displayed URL field must make subsequent input edit URL rather than Name. Cover collection/environment picker hit-testing and clicking outside controls.
+- [x] Run `go test ./internal/tui -run 'Test(EditorOpenMovesFocusToRequestPane|MouseSelectsEditorField)'`; confirm FAIL before the correction.
+- [x] Set request focus when entering edit mode and use mode-aware hit testing that matches the rendered editor, picker and pane boundaries. Keep dirty-navigation interception on request changes and retain help's input blocking.
+- [x] Run `go test ./internal/tui`; require PASS at 100×30 and 80×24 with color disabled, preserving existing approved navigation/help baselines.
 - [ ] Review and commit. Request/response split resizing stays in Task 11.
 
 
 <a id="task-9-status"></a>
 ### Task 9: Request editor, structured/raw body modes, save prompts, undo/redo, duplicate, and delete
 
-**Status:** Needs corrections
+**Status:** In progress
 
 **Files:**
 - Create: `internal/tui/editor.go`
@@ -772,12 +772,12 @@ git commit -m "feat: add request editing and save workflow"
 
 Files: `internal/tui/editor.go`, `internal/tui/navigation.go`, `internal/tui/view.go`, `internal/tui/editor_test.go`; create focused `internal/tui/json_editor.go` and `internal/tui/json_editor_test.go` if needed to keep structured editing isolated.
 
-- [ ] Write `TestQuestionMarkIsEditableRequestText` for URL query entry; assert `?` inserts into an active field. Write `TestUndoRestoresInvalidFieldDraft` for malformed Params, Headers and Auth drafts; assert undo restores valid prior text without requiring the malformed draft to parse.
-- [ ] Run `go test ./internal/tui -run 'Test(QuestionMarkIsEditableRequestText|UndoRestoresInvalidFieldDraft)'`; confirm FAIL before the correction.
-- [ ] Route literal input to active text controls before global help shortcuts; keep help discoverable outside active text entry. Track field draft undo/redo independently of successful typed parsing, within the current request session.
-- [ ] Write `TestStructuredJSONEditsNestedValues` for keyboard editing of object fields, array elements and scalar types, then Save; assert serialized JSON values and large integer precision. Include JSON text fallback and exact raw-body preservation. Run `go test ./internal/tui -run TestStructuredJSONEditsNestedValues`; confirm FAIL.
-- [ ] Add structured JSON controls as the default JSON presentation, with a text presentation of the same JSON value. Keep JSON presentation switches distinct from changing payload type to Raw. Expose explicit formatting and safe parser feedback; unsupported text remains recoverable rather than silently discarded.
-- [ ] Run `go test ./internal/tui ./internal/collection`; require PASS. Obtain review of requirement-derived editor layouts before promoting new visual baselines; do not treat the draft gallery's disputed behaviors as approved.
+- [x] Write `TestQuestionMarkIsEditableRequestText` for URL query entry; assert `?` inserts into an active field. Write `TestUndoRestoresInvalidFieldDraft` for malformed Params, Headers and Auth drafts; assert undo restores valid prior text without requiring the malformed draft to parse.
+- [x] Run `go test ./internal/tui -run 'Test(QuestionMarkIsEditableRequestText|UndoRestoresInvalidFieldDraft)'`; confirm FAIL before the correction.
+- [x] Route literal input to active text controls before global help shortcuts; keep help discoverable outside active text entry. Track field draft undo/redo independently of successful typed parsing, within the current request session.
+- [x] Write `TestStructuredJSONEditsNestedValues` for keyboard editing of object fields, array elements and scalar types, then Save; assert serialized JSON values and large integer precision. Include JSON text fallback and exact raw-body preservation. Run `go test ./internal/tui -run TestStructuredJSONEditsNestedValues`; confirm FAIL.
+- [x] Add structured JSON controls as the default JSON presentation, with a text presentation of the same JSON value. Keep JSON presentation switches distinct from changing payload type to Raw. Expose explicit formatting and safe parser feedback; unsupported text remains recoverable rather than silently discarded.
+- [x] Run `go test ./internal/tui ./internal/collection`; require PASS. Obtain review of requirement-derived editor layouts before promoting new visual baselines; do not treat the draft gallery's disputed behaviors as approved.
 - [ ] Review and commit each correction. Update editor help and future implementation interfaces as required; actual sending remains Task 10.
 
 
