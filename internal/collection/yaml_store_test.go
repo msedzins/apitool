@@ -127,7 +127,7 @@ func TestLoadRequestDecodesScalarAndSequenceScopes(t *testing.T) {
 
 func TestSecretReferencesAreAcceptedAndLiteralSecretsAreRejectedOnLoad(t *testing.T) {
 	t.Run("collection reference", func(t *testing.T) {
-		path := writeFile(t, "name: Users\nauth:\n  type: oauth2\n  grant: client_credentials\n  client_secret: ${USERS_CLIENT_SECRET}\n")
+		path := writeFile(t, "name: Users\nauth:\n  type: oauth2\n  grant: client_credentials\n  token_url: https://auth.example.test/token\n  client_id: ${USERS_CLIENT_ID}\n  client_secret: ${USERS_CLIENT_SECRET}\n")
 		if _, err := collection.LoadCollectionMeta(path); err != nil {
 			t.Fatalf("LoadCollectionMeta() error = %v", err)
 		}
@@ -315,5 +315,60 @@ func TestLoadRequestExpandsYAMLMergeKeysInJSONBody(t *testing.T) {
 	merged := request.Request.Body.Content.(map[string]any)["merged"].(map[string]any)
 	if merged["shared"] != "explicit" || merged["extra"] != 1 {
 		t.Fatalf("merged content = %#v", merged)
+	}
+}
+
+func TestCollectionAndGroupRejectUnsupportedAuth(t *testing.T) {
+	invalidDefinitions := []struct {
+		name     string
+		metadata string
+		group    string
+	}{
+		{name: "collection unsupported type", metadata: "name: Users\nauth:\n  type: basic\n"},
+		{name: "collection unsupported grant", metadata: "name: Users\nauth:\n  type: oauth2\n  grant: authorization_code\n"},
+		{name: "collection missing oauth fields", metadata: "name: Users\nauth:\n  type: oauth2\n  grant: client_credentials\n"},
+		{name: "literal credential is not included in diagnostic", metadata: "name: Users\nauth:\n  type: oauth2\n  grant: client_credentials\n  token_url: https://auth.example.test/token\n  client_id: client\n  client_secret: top-secret\n"},
+		{name: "group unsupported type", group: "auth:\n  type: basic\n"},
+		{name: "group unsupported grant", group: "auth:\n  type: oauth2\n  grant: authorization_code\n"},
+		{name: "group missing oauth fields", group: "auth:\n  type: oauth2\n  grant: client_credentials\n"},
+	}
+	for _, test := range invalidDefinitions {
+		t.Run(test.name, func(t *testing.T) {
+			var err error
+			if test.metadata != "" {
+				_, err = collection.LoadCollectionMeta(writeNamedFile(t, "collection.yaml", test.metadata))
+			} else {
+				_, err = collection.LoadGroup(writeNamedFile(t, "_group.yaml", test.group))
+			}
+			if err == nil {
+				t.Fatal("load error = nil, want invalid auth rejection")
+			}
+			if strings.Contains(err.Error(), "top-secret") {
+				t.Fatalf("error leaks credential: %v", err)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name     string
+		metadata string
+		group    string
+	}{
+		{name: "collection omitted", metadata: "name: Users\n"},
+		{name: "collection none", metadata: "name: Users\nauth: none\n"},
+		{name: "group omitted", group: "name: Admin\n"},
+		{name: "group none", group: "auth: none\n"},
+	} {
+		t.Run(test.name+" remains valid", func(t *testing.T) {
+			if test.metadata != "" {
+				if _, err := collection.LoadCollectionMeta(writeNamedFile(t, "collection.yaml", test.metadata)); err != nil {
+					t.Fatalf("LoadCollectionMeta() error = %v", err)
+				}
+				return
+			}
+			if _, err := collection.LoadGroup(writeNamedFile(t, "_group.yaml", test.group)); err != nil {
+				t.Fatalf("LoadGroup() error = %v", err)
+			}
+		})
 	}
 }

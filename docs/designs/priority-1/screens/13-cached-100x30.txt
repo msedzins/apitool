@@ -1,0 +1,30 @@
+┌─────────────────────────┬────────────────────────────────────────────────────────────────────────┐
+│Collections / tree       │▶ POST | {{base_url}}/payments                                          │
+│                         │[Send]  [Save] * Unsaved                                                │
+│▾ payments               │[Params] | Headers | Auth | Body | Settings                             │
+│  ▾ payments             ├────────────────────────────────────────────────────────────────────────┤
+│    GET list             │Name: Create payment *                                                  │
+│  > POST create          │Query: dry_run=false                                                    │
+│    ! broken             │                                                                        │
+│                         │                                                                        │
+│▸ users                  │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         ├────────────────────────────────────────────────────────────────────────┤
+│                         │201 Created | 184ms | 48 B | test | Cached                              │
+│                         │Received: 2026-09-30 12:06:00 UTC                                       │
+│                         │Previous execution; current draft may differ.                           │
+│                         │{ "id": "pay_123", "status": "created" }                                │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+│                         │                                                                        │
+├─────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│Collection: payments     │Environment: test | Git: design preview                                 │
+│? Help                   │Tab panes | Ctrl+S save | Ctrl+Enter send                               │
+└─────────────────────────┴────────────────────────────────────────────────────────────────────────┘

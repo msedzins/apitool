@@ -57,8 +57,42 @@ func Auth(auth *model.Auth) []model.Diagnostic {
 	if auth.Grant != "client_credentials" {
 		diagnostics = append(diagnostics, errorDiagnostic("auth_grant_unsupported", "auth.grant", "OAuth grant must be client_credentials"))
 	}
+	if strings.TrimSpace(auth.TokenURL) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_token_url_required", "auth.token_url", "OAuth token URL is required"))
+	}
+	if strings.TrimSpace(auth.ClientID) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_client_id_required", "auth.client_id", "OAuth client ID is required"))
+	}
+	if strings.TrimSpace(auth.ClientSecret) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_client_secret_required", "auth.client_secret", "OAuth client secret is required"))
+	}
 	if auth.ClientSecret != "" && !isEnvironmentReference(auth.ClientSecret) {
 		diagnostics = append(diagnostics, errorDiagnostic("secret_literal", "auth.client_secret", "client_secret must be a single process environment reference"))
+	}
+	return diagnostics
+}
+
+// AuthResolved validates OAuth configuration after variables have been
+// resolved. The secret is allowed to be a literal in memory at this point.
+func AuthResolved(auth *model.Auth) []model.Diagnostic {
+	if auth == nil || auth.None {
+		return nil
+	}
+	var diagnostics []model.Diagnostic
+	if auth.Type != "oauth2" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_type_unsupported", "auth.type", "auth type must be oauth2"))
+	}
+	if auth.Grant != "client_credentials" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_grant_unsupported", "auth.grant", "OAuth grant must be client_credentials"))
+	}
+	if strings.TrimSpace(auth.TokenURL) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_token_url_required", "auth.token_url", "OAuth token URL is required"))
+	}
+	if strings.TrimSpace(auth.ClientID) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_client_id_required", "auth.client_id", "OAuth client ID is required"))
+	}
+	if strings.TrimSpace(auth.ClientSecret) == "" {
+		diagnostics = append(diagnostics, errorDiagnostic("auth_client_secret_required", "auth.client_secret", "OAuth client secret is required"))
 	}
 	return diagnostics
 }

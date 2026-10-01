@@ -10,6 +10,37 @@
 
 **Spec:** [../specs/2026-09-20-apitool-design.md](../specs/2026-09-20-apitool-design.md)
 
+## Task status
+
+Reviewed on 2026-09-30. Tasks 1–9 have delivered implementations; the review identified corrective work below. Passing existing tests does not close a confirmed gap. Tasks 10–13 remain planned; this review did not certify their completion.
+
+- **Implemented:** delivered and reviewed, with no confirmed outstanding correction in this review.
+- **Needs corrections:** delivered, but the corrective checklist must pass before completion.
+- **In progress:** implementation or corrective work has started but is not verified.
+- **Planned:** not started or not yet verified as delivered.
+
+Update the table and matching task status together. Change Needs corrections to In progress when correction work starts, then Implemented only after its regression checks and review pass. Acceptance-case statuses are maintained separately in the acceptance suite.
+
+Original steps for Tasks 1–9 are retained as reference without progress checkboxes. Their new corrective checklists track remaining work; steps for Tasks 10–13 retain their implementation checkboxes.
+
+| Task | Status | Remaining work / scope |
+|---|---|---|
+| [T-001](#task-1-status) | Implemented | Reject unsupported collection/group authentication. |
+| [T-002](#task-2-status) | Implemented | Discovery and inherited diagnostics reviewed; execution enforcement is tracked in Task 6. |
+| [T-003](#task-3-status) | Implemented | Validate effective inherited auth before execution. |
+| [T-004](#task-4-status) | Implemented | OAuth and transport reviewed; no confirmed correction. |
+| [T-005](#task-5-status) | Implemented | Prevent collisions between nested cache identities. |
+| [T-006](#task-6-status) | Implemented | Protect request writes; block invalid ancestors; surface storage failures. |
+| [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
+| [T-008](#task-8-status) | Implemented | Editor focus and mode-aware mouse routing verified. |
+| [T-009](#task-9-status) | Implemented | Structured JSON editing and recoverable drafts verified. |
+| [T-010](#task-10-status) | Planned | Send workflow and response/diagnostic/token views. |
+| [T-011](#task-11-status) | Planned | History, Git palette, split resizing and user documentation. |
+| [T-012](#task-12-status) | Planned | Assembled end-to-end verification. |
+| [T-013](#task-13-status) | Planned | CI quality gate. |
+
+Correction order: Task 1 → Task 3 → Task 6 for auth/containment/storage safety; Task 7 redaction can be completed independently, followed by Task 5 cache isolation and Tasks 8–9 editor corrections. Keep future response rendering in Task 10.
+
 ## Global Constraints
 
 - The workspace is a Git repository and may contain multiple collections discovered solely from a descendant `.api/` directory.
@@ -55,7 +86,10 @@ testdata/workspace/                         committed safe fixture workspace
 
 Tasks 1–7 establish a headless, testable application. Tasks 8–11 layer the TUI onto those use cases. Task 12 verifies the assembled binary against a multi-collection fixture.
 
+<a id="task-1-status"></a>
 ### Task 1: Bootstrap, typed definitions, YAML persistence, and structural validation
+
+**Status:** Implemented
 
 **Files:**
 - Create: `go.mod`
@@ -73,7 +107,7 @@ Tasks 1–7 establish a headless, testable application. Tasks 8–11 layer the T
 - Produces `collection.LoadCollectionMeta(path string)`, `collection.LoadEnvironment(path string)`, `collection.LoadRequest(path string)`, and `collection.SaveRequest(path string, request model.Request)`.
 - Produces `validate.Definition(request model.Request) []model.Diagnostic`.
 
-- [ ] **Step 1: Initialize the module and ignore operational data**
+- **Step 1: Initialize the module and ignore operational data**
 
 Create `go.mod` with module `apitool`; add Bubble Tea, YAML, and OAuth dependencies with `go get` in the implementation step that first imports them. Create `.gitignore` containing:
 
@@ -83,7 +117,7 @@ Create `go.mod` with module `apitool`; add Bubble Tea, YAML, and OAuth dependenc
 
 Create a minimal `main.go` that exits with a clear error if the application constructor fails. Do not add product behavior in `main` yet.
 
-- [ ] **Step 2: Write failing YAML and validation tests**
+- **Step 2: Write failing YAML and validation tests**
 
 ```go
 func TestLoadRequestAndSaveRoundTrip(t *testing.T) {
@@ -109,13 +143,13 @@ func TestDefinitionRejectsLiteralClientSecret(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run the focused tests and confirm failure**
+- **Step 3: Run the focused tests and confirm failure**
 
 Run: `go test ./internal/collection ./internal/validate -run 'Test(LoadRequestAndSaveRoundTrip|DefinitionRejectsLiteralClientSecret)'`
 
 Expected: FAIL because the packages and functions do not exist.
 
-- [ ] **Step 4: Implement the domain model and YAML store**
+- **Step 4: Implement the domain model and YAML store**
 
 Use these exact core shapes so later tasks share one vocabulary:
 
@@ -145,20 +179,34 @@ type Diagnostic struct { Code, Path, Message string; Severity Severity }
 
 Decode `auth: none` with a small YAML intermediary, normalize methods to uppercase, accept scope sequence or space-delimited scalar, serialize JSON-body content as ordinary YAML data, and write atomically through a temporary file in the target directory. Reject literal values in fields named `client_secret` unless the complete value is a single `${NAME}` reference. Validate required `name`, `method`, `request.url`, allowed body types, supported OAuth grant/type, positive parsable timeout, and JSON-serializability of `body.type: json`.
 
-- [ ] **Step 5: Run focused and package tests**
+- **Step 5: Run focused and package tests**
 
 Run: `go test ./internal/collection ./internal/validate`
 
 Expected: PASS, including missing URL, invalid JSON content, unsupported auth grant, negative timeout, and literal-secret tests.
 
-- [ ] **Step 6: Commit the bootstrap**
+- **Step 6: Commit the bootstrap**
 
 ```bash
 git add .gitignore go.mod go.sum cmd/apitool internal/model internal/collection internal/validate
 git commit -m "feat: add YAML definition model and validation"
 ```
 
+#### Corrective work: inherited auth schema
+
+Files: `internal/collection/yaml_store.go`, `internal/validate/definition.go`, `internal/collection/yaml_store_test.go`, `internal/validate/definition_test.go`.
+
+- [x] Write `TestCollectionAndGroupRejectUnsupportedAuth` for `type: basic`, OAuth `grant: authorization_code`, and missing OAuth fields; assert a safe validation error at collection/group load, while omitted auth and `auth: none` remain valid.
+- [x] Run `go test ./internal/collection ./internal/validate -run 'TestCollectionAndGroupRejectUnsupportedAuth'`; confirm it fails on the current implementation.
+- [x] Apply shared auth validation to collection and group definitions, preserving single process-variable client-secret references and accepted scope forms. Attach safe field/source diagnostics without credential values.
+- [x] Run `go test ./internal/collection ./internal/validate`; require PASS.
+- [x] Review the correction and commit it; keep the task Needs corrections until verification/review passes.
+
+
+<a id="task-2-status"></a>
 ### Task 2: Discover workspace collections and construct request trees
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/workspace/discover.go`
@@ -175,7 +223,7 @@ git commit -m "feat: add YAML definition model and validation"
 - Produces `workspace.FindRoot(start string) (string, error)` and `workspace.Discover(root string) []collection.LocatedCollection`.
 - Produces `collection.BuildTree(collectionRoot string) (collection.Tree, []model.Diagnostic)` where `Tree.Requests` uses stable relative IDs.
 
-- [ ] **Step 1: Write failing discovery/tree tests**
+- **Step 1: Write failing discovery/tree tests**
 
 ```go
 func TestDiscoverFindsOnlyDirectoriesContainingDotAPI(t *testing.T) {
@@ -192,34 +240,37 @@ func TestBuildTreeUsesRequestPathAsStableIDAndKeepsInvalidSibling(t *testing.T) 
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/workspace ./internal/collection -run 'Test(DiscoverFindsOnlyDirectoriesContainingDotAPI|BuildTreeUsesRequestPathAsStableIDAndKeepsInvalidSibling)'`
 
 Expected: FAIL because discovery and tree APIs do not exist.
 
-- [ ] **Step 3: Implement discovery and graceful tree loading**
+- **Step 3: Implement discovery and graceful tree loading**
 
 Walk only below the Git root, skip `.git` and `.apitool`, and record a collection for every directory whose direct child is `.api`. Sort collection names and tree nodes lexically for deterministic UI/tests. Derive a request ID by trimming `.api/requests/` and `.yaml`; reject `_group.yaml` as a request. For every group directory, collect ancestors in root-to-leaf order. Retain malformed collection/request entries as nodes with diagnostics so a bad file does not abort discovery.
 
-- [ ] **Step 4: Expand tests for nested groups and malformed collection metadata**
+- **Step 4: Expand tests for nested groups and malformed collection metadata**
 
 Add a nested path `admin/refunds/list.yaml`; assert ID `admin/refunds/list` and group chain `admin`, `admin/refunds`. Add a collection with `.api` but invalid `collection.yaml`; assert it is discovered with a collection diagnostic rather than omitted.
 
-- [ ] **Step 5: Run all package tests**
+- **Step 5: Run all package tests**
 
 Run: `go test ./internal/workspace ./internal/collection`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit discovery**
+- **Step 6: Commit discovery**
 
 ```bash
 git add internal/workspace internal/collection testdata/workspace
 git commit -m "feat: discover collections and request trees"
 ```
 
+<a id="task-3-status"></a>
 ### Task 3: Resolve environments, inheritance, and effective configuration
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/resolve/effective.go`
@@ -233,7 +284,7 @@ git commit -m "feat: discover collections and request trees"
 - Produces `resolve.Effective(collection model.Collection, env model.Environment, groups []model.Group, request model.Request) (model.EffectiveRequest, []model.Diagnostic)`.
 - `model.EffectiveRequest` contains resolved method, URL, params, headers, body bytes, effective auth, parsed timeout, and explicit TLS flag.
 
-- [ ] **Step 1: Write failing resolution tests**
+- **Step 1: Write failing resolution tests**
 
 ```go
 func TestEffectiveUsesNearestAuthAndAuthNoneDisablesInheritance(t *testing.T) {
@@ -250,36 +301,50 @@ func TestEffectiveRejectsUnresolvedVariableInNestedJSONWithoutLeakingValue(t *te
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/resolve -run 'TestEffective(UsesNearestAuthAndAuthNoneDisablesInheritance|RejectsUnresolvedVariableInNestedJSONWithoutLeakingValue)'`
 
 Expected: FAIL because `Effective` does not exist.
 
-- [ ] **Step 3: Implement interpolation and merge rules**
+- **Step 3: Implement interpolation and merge rules**
 
 First replace every `{{name}}` from `Environment.Variables`; then replace every `${NAME}` through an injected `LookupEnv func(string) (string, bool)`. Traverse JSON body structures recursively before marshaling. A missing value produces diagnostic code `variable_missing`, field path, and variable name only. Do not recursively resolve a value after one environment and one process pass; this prevents surprising expansion cycles.
 
 Merge HTTP as collection defaults followed by environment fields that are present. Select auth from collection, then each group in order, then request. A `None` auth stops inheritance. Parse the effective timeout with `time.ParseDuration`; use `http.DefaultClient`-compatible behavior only when no timeout is set. Always set TLS verification on unless the effective pointer equals `true`.
 
-- [ ] **Step 4: Add table tests for resolution boundaries**
+- **Step 4: Add table tests for resolution boundaries**
 
 Cover: scalar URL/header/param expansion; `${API_CLIENT_ID}` read from injected lookup; absent process variable; no request-local scope; group scopes overriding collection scopes; environment timeout override; and `insecure_skip_verify: false` overriding a collection-level true value.
 
-- [ ] **Step 5: Run all resolver tests**
+- **Step 5: Run all resolver tests**
 
 Run: `go test ./internal/resolve`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit configuration resolution**
+- **Step 6: Commit configuration resolution**
 
 ```bash
 git add internal/model internal/resolve
 git commit -m "feat: resolve environments and inherited configuration"
 ```
 
+#### Corrective work: effective auth validation
+
+Files: `internal/resolve/effective.go`, `internal/resolve/effective_test.go`.
+
+- [x] Write `TestEffectiveRejectsUnsupportedInheritedAuth` with collection and nearest-group configurations; assert diagnostics for unsupported type/grant and missing required OAuth values, without revealing resolved credentials. Cover request `auth: none` disabling valid inherited OAuth.
+- [x] Run `go test ./internal/resolve -run TestEffectiveRejectsUnsupportedInheritedAuth`; confirm FAIL before the correction.
+- [x] Validate selected effective auth structurally and after resolution. Use resolved-value validation that permits a resolved secret in memory, rather than applying the definition-only secret-reference rule to it. Preserve nearest-setting precedence.
+- [x] Run `go test ./internal/resolve ./internal/validate`; require PASS. Task 6 must refuse execution when these diagnostics are returned.
+- [x] Review and commit the correction before marking this task Implemented.
+
+
+<a id="task-4-status"></a>
 ### Task 4: OAuth client credentials and HTTP transport
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/auth/client_credentials.go`
@@ -293,7 +358,7 @@ git commit -m "feat: resolve environments and inherited configuration"
 - Produces `auth.TokenProvider` with `Token(ctx context.Context, config model.Auth) (auth.Token, error)` and `auth.Mask(value string) string`.
 - Produces `transport.Execute(ctx context.Context, effective model.EffectiveRequest, tokenProvider auth.TokenProvider) (model.Response, *model.ExecutionError)`.
 
-- [ ] **Step 1: Write failing OAuth and transport tests with `httptest`**
+- **Step 1: Write failing OAuth and transport tests with `httptest`**
 
 ```go
 func TestClientCredentialsCachesUnexpiredTokenAndSendsScopes(t *testing.T) {
@@ -313,36 +378,39 @@ func TestOAuthInvalidClientDiagnosticIsRedacted(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/auth ./internal/transport -run 'Test(ClientCredentialsCachesUnexpiredTokenAndSendsScopes|OAuthInvalidClientDiagnosticIsRedacted)'`
 
 Expected: FAIL because the packages do not exist.
 
-- [ ] **Step 3: Implement token and transport behavior**
+- **Step 3: Implement token and transport behavior**
 
 POST client credentials to `token_url` with requested scopes, cache tokens in the provider memory only, and refresh before expiry. Never return an error string containing secret, token, or raw Authorization value. Build an HTTP request with resolved URL, query parameters, headers, and body. Add `Authorization: Bearer <token>` only when effective auth is OAuth and not `None`. Use a transport configured with the effective timeout and `tls.Config.InsecureSkipVerify` only when explicitly true.
 
 Classify only request-build, OAuth, DNS, connection, TLS, context, and timeout failures as `ExecutionError{Stage, Category, SafeMessage}`. Return every completed `http.Response`, regardless of status code, as `model.Response` with status, headers, body, duration, and received time.
 
-- [ ] **Step 4: Add transport boundary tests**
+- **Step 4: Add transport boundary tests**
 
 Test: a 401 response is returned as a response; a canceled context is `CategoryCanceled`; an expired cached token triggers reacquisition; `auth: none` sends no Authorization header; raw body bytes are unchanged; and a self-signed test server fails until `InsecureSkipVerify` is explicitly true.
 
-- [ ] **Step 5: Run package tests**
+- **Step 5: Run package tests**
 
 Run: `go test ./internal/auth ./internal/transport`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit authenticated transport**
+- **Step 6: Commit authenticated transport**
 
 ```bash
 git add internal/auth internal/transport
 git commit -m "feat: execute OAuth client-credentials requests"
 ```
 
+<a id="task-5-status"></a>
 ### Task 5: Local runtime state, cache, history, and redacted execution log
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/runtime/store.go`
@@ -357,7 +425,7 @@ git commit -m "feat: execute OAuth client-credentials requests"
 - Produces `runtime.Open(workspaceRoot string) (*runtime.Store, error)` and methods `SaveResponse`, `LatestResponse`, `AppendHistory`, `SearchHistory`, `AppendLog`, `LoadState`, `SaveState`.
 - `runtime.Key` is `{CollectionPath, Environment, RequestID string}`.
 
-- [ ] **Step 1: Write failing runtime-isolation and redaction tests**
+- **Step 1: Write failing runtime-isolation and redaction tests**
 
 ```go
 func TestResponseCacheIsIsolatedByEnvironment(t *testing.T) {
@@ -375,19 +443,19 @@ func TestRedactionNeverWritesAuthorizationOrToken(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/runtime -run 'Test(ResponseCacheIsIsolatedByEnvironment|RedactionNeverWritesAuthorizationOrToken)'`
 
 Expected: FAIL because `runtime.Store` is absent.
 
-- [ ] **Step 3: Implement the visible `.apitool` layout**
+- **Step 3: Implement the visible `.apitool` layout**
 
 Create only this workspace-local structure:
 
 ```text
 .apitool/
-├── responses/<collection>/<environment>/<request-id>/latest.json
+├── responses/<collection>/<environment>/<request-id>/.key-<sha256-identity>/latest.json
 ├── history.jsonl
 ├── state.json
 └── logs/
@@ -395,24 +463,38 @@ Create only this workspace-local structure:
 
 Encode cache records with redacted headers, never request headers/body/auth configuration, and owner-only permissions where supported. Keep complete response bodies local in cache. Append history entries containing timestamp, collection, request ID, method, result status or safe error category, and duration—never token, secret, raw request body, or Authorization header. Store one JSON object per history line and filter by case-insensitive collection/request/method/status text. `state.json` contains only last active environment per collection and panel preferences.
 
-- [ ] **Step 4: Add redaction and persistence tests**
+- **Step 4: Add redaction and persistence tests**
 
 Test redaction for `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `client_secret`, and `access_token`; assert cache path includes collection/environment/request ID; assert `history.jsonl` contains no secret after an OAuth failure; assert `LoadState` on no file returns empty state.
 
-- [ ] **Step 5: Run runtime tests**
+- **Step 5: Run runtime tests**
 
 Run: `go test ./internal/runtime`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit runtime persistence**
+- **Step 6: Commit runtime persistence**
 
 ```bash
 git add internal/runtime
 git commit -m "feat: add local cache history and redacted logs"
 ```
 
+#### Corrective work: cache identity boundaries
+
+Files: `internal/runtime/store.go`, `internal/runtime/store_test.go`.
+
+- [x] Write `TestResponseCacheSeparatesNestedIdentityBoundaries` with keys `(collection=a/b, environment=c, request=d)` and `(collection=a, environment=b, request=c/d)`; save both, then assert each loads its own response.
+- [x] Run `go test ./internal/runtime -run TestResponseCacheSeparatesNestedIdentityBoundaries`; confirm FAIL before the correction.
+- [x] Encode collection, environment and request identities with unambiguous boundaries while preserving traversal/symlink protections and identity checks. Read legacy cache only when its stored identity matches exactly; new writes use the collision-free layout.
+- [x] Extend the regression to verify a matching legacy cache is readable and a mismatched legacy identity is never returned; run `go test ./internal/runtime`; require PASS.
+- [x] Review and commit; update the runtime-layout documentation to match the verified cache layout.
+
+
+<a id="task-6-status"></a>
 ### Task 6: Application service and CLI startup modes
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/app/service.go`
@@ -424,7 +506,7 @@ git commit -m "feat: add local cache history and redacted logs"
 - Produces `app.New(deps app.Dependencies) (*app.Service, error)`, `OpenWorkspace`, `OpenCollection`, `SelectEnvironment`, `SaveRequest`, `Send`, `DuplicateRequest`, and `Delete`.
 - `Send(ctx, app.Selection) app.SendResult` contains exactly one of `Response` or `ExecutionError`, plus redacted log entries.
 
-- [ ] **Step 1: Write failing service tests**
+- **Step 1: Write failing service tests**
 
 ```go
 func TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride(t *testing.T) {
@@ -438,34 +520,50 @@ func TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride(t *testing.
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/app -run TestOpenWorkspaceRestoresCollectionEnvironmentUnlessCLIOverride`
 
 Expected: FAIL because the service does not exist.
 
-- [ ] **Step 3: Implement use cases and CLI flags**
+- **Step 3: Implement use cases and CLI flags**
 
 Add `-e, --env <name>` and `-c, --confirm-dangerous` in `main`. With no collection positional argument, launch on the collection picker; one positional collection name opens it directly. Reject unknown environments before rendering the request. Save validates before writing. Duplicate copies a request to a caller-provided, collision-free path; delete returns a confirmation-ready deletion target and performs file/folder removal only after the caller confirms. `Send` refuses invalid definitions and returns a confirmation requirement for unsafe methods when confirm-dangerous mode is on.
 
-- [ ] **Step 4: Add app behavior tests**
+- **Step 4: Add app behavior tests**
 
 Test: invalid request cannot send; `-c` requires confirmation for DELETE but not GET; selecting environment writes only `.apitool/state.json`; duplicate has a distinct file/ID; deleting a group lists descendants before deletion; an HTTP 500 produces `Response`, while a connection error produces `ExecutionError` and a history entry.
 
-- [ ] **Step 5: Run service tests and compile binary**
+- **Step 5: Run service tests and compile binary**
 
 Run: `go test ./internal/app && go build ./cmd/apitool`
 
 Expected: PASS and an `apitool` binary is built.
 
-- [ ] **Step 6: Commit application use cases**
+- **Step 6: Commit application use cases**
 
 ```bash
 git add cmd/apitool internal/app
 git commit -m "feat: add application service and CLI options"
 ```
 
+#### Corrective work: write containment, invalid ancestors and persistence diagnostics
+
+Files: `internal/app/service.go`, `internal/app/service_test.go`, `internal/collection/yaml_store.go`, `internal/collection/yaml_store_test.go`.
+
+- [x] Write `TestSaveAndDuplicateRejectSymlinkedRequestDirectory`: point a request-directory symlink at an external temporary directory; assert Save and Duplicate fail and do not create or modify external files. Run `go test ./internal/app -run TestSaveAndDuplicateRejectSymlinkedRequestDirectory`; confirm FAIL.
+- [x] Protect all request-write ancestors and final destinations with descriptor-relative or equivalently race-resistant containment checks. Preserve atomic Save and create-only duplicate collision behavior; do not rely solely on a path check followed by an unchecked write.
+- [x] Write `TestSendRejectsInvalidAncestorGroup`: malformed group YAML and unsupported inherited group auth must return safe diagnostics and call neither OAuth nor HTTP execution. Run `go test ./internal/app -run TestSendRejectsInvalidAncestorGroup`; confirm FAIL.
+- [x] Refuse execution when the selected request carries inherited load/validation diagnostics; preserve valid siblings and explicit authentication inheritance.
+- [x] Write `TestSendReportsRuntimePersistenceFailures`: independently force log/history/cache writes to fail; assert the completed HTTP response is preserved and safe storage diagnostics identify each failed persistence operation. Run `go test ./internal/app -run TestSendReportsRuntimePersistenceFailures`; confirm FAIL.
+- [x] Add storage diagnostics to the send result without recasting a completed HTTP exchange as transport failure; retain all independent persistence errors. Task 10 renders these diagnostics.
+- [x] Run `go test ./internal/app ./internal/collection ./internal/runtime`; require PASS, then review and commit each independently verifiable correction.
+
+
+<a id="task-7-status"></a>
 ### Task 7: Thin local-Git adapter
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/git/repository.go`
@@ -476,7 +574,7 @@ git commit -m "feat: add application service and CLI options"
 - Produces `git.Repository` methods `Status(ctx)`, `Diff(ctx)`, `Pull(ctx)`, `Push(ctx)`, and `Commit(ctx, message string)`.
 - App exposes corresponding commands as safe text results; it never stages files.
 
-- [ ] **Step 1: Write failing adapter tests using temporary repositories**
+- **Step 1: Write failing adapter tests using temporary repositories**
 
 ```go
 func TestStatusAndDiffRunAtWorkspaceRoot(t *testing.T) {
@@ -495,34 +593,48 @@ func TestCommitRejectsBlankMessageBeforeInvokingGit(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/git -run 'Test(StatusAndDiffRunAtWorkspaceRoot|CommitRejectsBlankMessageBeforeInvokingGit)'`
 
 Expected: FAIL because the adapter is absent.
 
-- [ ] **Step 3: Implement bounded Git commands**
+- **Step 3: Implement bounded Git commands**
 
 Invoke `git` with its working directory pinned to workspace root. Return captured stdout/stderr as a displayable safe result, preserving exit failure. `Commit` runs only `git commit -m <message>` and never runs `git add`. `Pull` and `Push` pass no invented branch/remote. Ensure `.apitool` remains absent from app Git status/diff by relying on the root ignore file created in Task 1.
 
-- [ ] **Step 4: Add negative tests**
+- **Step 4: Add negative tests**
 
 Test non-repository root gives a clear error; failing pull retains command output; diff does not cause a write; and commit succeeds only when the fixture has already staged a file.
 
-- [ ] **Step 5: Run adapter and app tests**
+- **Step 5: Run adapter and app tests**
 
 Run: `go test ./internal/git ./internal/app`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Git integration**
+- **Step 6: Commit Git integration**
 
 ```bash
 git add internal/git internal/app
 git commit -m "feat: add thin Git workspace integration"
 ```
 
+#### Corrective work: multiline Git diff redaction
+
+Files: `internal/git/repository.go`, `internal/git/repository_test.go`.
+
+- [x] Write `TestDiffRedactsMultilineYAMLCredentials` using literal/folded YAML blocks and multiline quoted values for authorization, cookies, tokens and client secrets. Assert neither added nor removed credential content is exposed and unrelated definition changes remain readable.
+- [x] Run `go test ./internal/git -run TestDiffRedactsMultilineYAMLCredentials`; confirm FAIL before the correction.
+- [x] Redact complete sensitive values and their continuation lines in both diff directions. Handle partial hunks conservatively; use full-file context where necessary to establish whether a continuation is sensitive. Preserve runtime path exclusion.
+- [x] Run `go test ./internal/git ./internal/app`; require PASS, including staged/unstaged diffs and negative Git-operation checks.
+- [x] Review and commit before marking this task Implemented.
+
+
+<a id="task-8-status"></a>
 ### Task 8: Bubble Tea shell, collection navigation, and accessible status presentation
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/model.go`
@@ -537,7 +649,7 @@ git commit -m "feat: add thin Git workspace integration"
 - Produces `tui.New(service *app.Service, options tui.Options) tea.Model`.
 - `tui.Options` contains starting collection, starting environment, and confirm-dangerous mode.
 
-- [ ] **Step 1: Write failing model tests**
+- **Step 1: Write failing model tests**
 
 ```go
 func TestCollectionPickerOpensCollectionAndRestoresItsEnvironment(t *testing.T) {
@@ -554,36 +666,50 @@ func TestStatusViewUsesTextWhenColorDisabled(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/tui -run 'Test(CollectionPickerOpensCollectionAndRestoresItsEnvironment|StatusViewUsesTextWhenColorDisabled)'`
 
 Expected: FAIL because the TUI package does not exist.
 
-- [ ] **Step 3: Implement the shell, explorer, keyboard help, and focus feedback**
+- **Step 3: Implement the shell, explorer, keyboard help, and focus feedback**
 
 Build a three-region view: persistent left collection/request tree, upper request area, lower response/diagnostic area. Implement collection picker, direct opening, environment picker, tree expansion, `Tab`, arrows, `Enter`, `Esc`, `/`, and `Ctrl+P`. Add mouse click routing for focus/selection and optional `j/k/h/l` aliases. Render status color when capable and explicit textual category (`success`, `redirect`, `client error`, `server error`, `warning`) when not. Store splitter and active collection/environment preferences through Task 5 state.
 
 Implement keyboard help and pane-focus behavior from the design specification. `?` opens help from collection picker, environment picker, search, and collection view; only `?`, `Esc`, and `Ctrl+C` act while the overlay is open. Closing help restores the unchanged underlying mode, selection, query, and focus; `Ctrl+C` exits. In the collection view, `Tab` cycles collection, request, response, and collection; exactly one pane heading carries the text marker `▶`, including when color is disabled. Render the centered 100×30 overlay and a compact one-column fallback for smaller terminals.
 
-- [ ] **Step 4: Add navigation and accessibility tests**
+- **Step 4: Add navigation and accessibility tests**
 
 Test collection switching changes tree and environment; invalid request gets a warning marker but valid siblings remain selectable; `Ctrl+E` opens environment picker; `Tab` cycles panes; mouse-independent keyboard flow opens a request; and `j/k` behavior is disabled unless Vim option is enabled. Add focused tests for opening help from every TUI mode; closing it with `?` or `Esc` and restoring the underlying view; verifying unsupported keys do not dismiss or mutate the obscured view; confirming `Ctrl+C` exits; checking exactly one focus marker through the full Tab cycle without color; and verifying compact help fits at the 80×24 acceptance viewport. The approved 100×30 baselines are `testdata/ui-001/payments-tree.txt` for collection focus, `testdata/ui-015/keyboard-help.txt` for help, and `testdata/ui-017/request-focus.txt` plus `testdata/ui-017/response-focus.txt` for request and response focus. Snapshot tests must read these committed files directly as their sole visual source of truth.
 
-- [ ] **Step 5: Run TUI tests and manual smoke test**
+- **Step 5: Run TUI tests and manual smoke test**
 
 Run: `go test ./internal/tui -count=1 && go test ./... && go run ./cmd/apitool --help`
 
 Expected: PASS; help lists `--env` and `--confirm-dangerous`, and the TUI suite validates the updated collection screen and three new approved screen baselines.
 
-- [ ] **Step 6: Commit TUI shell**
+- **Step 6: Commit TUI shell**
 
 ```bash
 git add internal/tui cmd/apitool
 git commit -m "feat: add collection navigation TUI"
 ```
 
+#### Corrective work: keyboard focus and mouse routing
+
+Files: `internal/tui/navigation.go`, `internal/tui/model_test.go`, `internal/tui/editor_test.go`, `internal/tui/view_test.go`.
+
+- [x] Write `TestEditorOpenMovesFocusToRequestPane`: selecting a request and pressing `e` must mark the request pane active. Write `TestMouseSelectsEditorField`: clicking the displayed URL field must make subsequent input edit URL rather than Name. Cover collection/environment picker hit-testing and clicking outside controls.
+- [x] Run `go test ./internal/tui -run 'Test(EditorOpenMovesFocusToRequestPane|MouseSelectsEditorField)'`; confirm FAIL before the correction.
+- [x] Set request focus when entering edit mode and use mode-aware hit testing that matches the rendered editor, picker and pane boundaries. Keep dirty-navigation interception on request changes and retain help's input blocking.
+- [x] Run `go test ./internal/tui`; require PASS at 100×30 and 80×24 with color disabled, preserving existing approved navigation/help baselines.
+- [x] Review and commit. Request/response split resizing stays in Task 11.
+
+
+<a id="task-9-status"></a>
 ### Task 9: Request editor, structured/raw body modes, save prompts, undo/redo, duplicate, and delete
+
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/editor.go`
@@ -597,7 +723,7 @@ git commit -m "feat: add collection navigation TUI"
 - Consumes `app.SaveRequest`, `app.DuplicateRequest`, and delete confirmation target from Task 6.
 - Produces editor methods `Load(model.Request)`, `Dirty() bool`, `Undo()`, `Redo()`, `Save() tea.Cmd`, and `SwitchBodyMode(mode BodyMode)`.
 
-- [ ] **Step 1: Write failing editor behavior tests**
+- **Step 1: Write failing editor behavior tests**
 
 ```go
 func TestDirtyRequestPromptsBeforeNavigation(t *testing.T) {
@@ -615,34 +741,50 @@ func TestJSONModePrettyPrintsAndRawModePreservesRawBytes(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/tui -run 'Test(DirtyRequestPromptsBeforeNavigation|JSONModePrettyPrintsAndRawModePreservesRawBytes)'`
 
 Expected: FAIL because the editor is absent.
 
-- [ ] **Step 3: Implement typed editor state**
+- **Step 3: Implement typed editor state**
 
 Edit typed request fields—method, URL, params, headers, auth, body, and name—rather than YAML text. JSON mode uses decoded structured data and validates/pretty-prints before it is saved or sent; raw mode stores exact text. Maintain an undo and redo stack only for the currently open request. `Ctrl+S` validates through Task 1 and saves via Task 6. On dirty navigation show Save and continue / Discard changes / Cancel; never autosave. Add command-palette actions for duplicate and delete. Delete request/group shows exact affected path(s) and requires affirmative confirmation.
 
-- [ ] **Step 4: Add editor safety tests**
+- **Step 4: Add editor safety tests**
 
 Test invalid JSON cannot save or send; undo/redo restores URL/body; undo history resets after opening another request; duplicate immediately opens a new unsaved name/path flow; group delete lists descendants; and discard leaves the YAML file unchanged.
 
-- [ ] **Step 5: Run TUI suite**
+- **Step 5: Run TUI suite**
 
 Run: `go test ./internal/tui`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit editing workflow**
+- **Step 6: Commit editing workflow**
 
 ```bash
 git add internal/tui internal/app
 git commit -m "feat: add request editing and save workflow"
 ```
 
+#### Corrective work: structured JSON and recoverable field drafts
+
+Files: `internal/tui/editor.go`, `internal/tui/navigation.go`, `internal/tui/view.go`, `internal/tui/editor_test.go`; create focused `internal/tui/json_editor.go` and `internal/tui/json_editor_test.go` if needed to keep structured editing isolated.
+
+- [x] Write `TestQuestionMarkIsEditableRequestText` for URL query entry; assert `?` inserts into an active field. Write `TestUndoRestoresInvalidFieldDraft` for malformed Params, Headers and Auth drafts; assert undo restores valid prior text without requiring the malformed draft to parse.
+- [x] Run `go test ./internal/tui -run 'Test(QuestionMarkIsEditableRequestText|UndoRestoresInvalidFieldDraft)'`; confirm FAIL before the correction.
+- [x] Route literal input to active text controls before global help shortcuts; keep help discoverable outside active text entry. Track field draft undo/redo independently of successful typed parsing, within the current request session.
+- [x] Write `TestStructuredJSONEditsNestedValues` for keyboard editing of object fields, array elements and scalar types, then Save; assert serialized JSON values and large integer precision. Include JSON text fallback and exact raw-body preservation. Run `go test ./internal/tui -run TestStructuredJSONEditsNestedValues`; confirm FAIL.
+- [x] Add structured JSON controls as the default JSON presentation, with a text presentation of the same JSON value. Keep JSON presentation switches distinct from changing payload type to Raw. Expose explicit formatting and safe parser feedback; unsupported text remains recoverable rather than silently discarded.
+- [x] Run `go test ./internal/tui ./internal/collection`; require PASS. Obtain review of requirement-derived editor layouts before promoting new visual baselines; do not treat the draft gallery's disputed behaviors as approved.
+- [x] Review and commit each correction. Update editor help and future implementation interfaces as required; actual sending remains Task 10.
+
+
+<a id="task-10-status"></a>
 ### Task 10: Send workflow, response/diagnostic/auth/log panels, and dangerous-operation confirmation
+
+**Status:** Planned
 
 **Files:**
 - Create: `internal/tui/execute.go`
@@ -699,7 +841,10 @@ git add internal/tui
 git commit -m "feat: add request execution and response diagnostics"
 ```
 
+<a id="task-11-status"></a>
 ### Task 11: TUI history, Git commands, layout resizing, and final user-facing documentation
+
+**Status:** Planned
 
 **Files:**
 - Create: `internal/tui/history.go`
@@ -757,7 +902,10 @@ git add internal/tui README.md
 git commit -m "feat: complete history Git controls and documentation"
 ```
 
+<a id="task-12-status"></a>
 ### Task 12: End-to-end fixture verification and release-readiness checks
+
+**Status:** Planned
 
 **Files:**
 - Create: `internal/app/e2e_test.go`
@@ -814,7 +962,10 @@ git add internal/app testdata README.md
 git commit -m "test: verify end-to-end MVP workflow"
 ```
 
+<a id="task-13-status"></a>
 ### Task 13: GitHub Actions continuous-integration gate
+
+**Status:** Planned
 
 **Files:**
 - Create: `.github/workflows/ci.yml`

@@ -3,6 +3,7 @@ package collection_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"apitool/internal/collection"
@@ -45,7 +46,7 @@ func TestBuildTreeMarksParsedRequestInvalidWhenValidationFails(t *testing.T) {
 func TestBuildTreePreservesNestedGroupChainAndGroupAuth(t *testing.T) {
 	root := collectionRoot(t)
 	writeDefinition(t, root, "admin/_group.yaml", "name: Admin\nauth: none\n")
-	writeDefinition(t, root, "admin/refunds/_group.yaml", "name: Refunds\nauth:\n  type: oauth2\n  grant: client_credentials\n  scopes: refunds.read refunds.write\n")
+	writeDefinition(t, root, "admin/refunds/_group.yaml", "name: Refunds\nauth:\n  type: oauth2\n  grant: client_credentials\n  token_url: https://auth.example.test/token\n  client_id: refunds-client\n  client_secret: ${REFUNDS_CLIENT_SECRET}\n  scopes: refunds.read refunds.write\n")
 	writeDefinition(t, root, "admin/refunds/list.yaml", "name: List refunds\nmethod: GET\nrequest:\n  url: https://api.example.test/refunds\n")
 
 	tree, diagnostics := collection.BuildTree(root)
@@ -109,8 +110,8 @@ func TestBuildTreeMarksInvalidYAMLSuffixGroupAuthAndDependentRequest(t *testing.
 		auth       string
 		diagnostic string
 	}{
-		{name: "unsupported type", auth: "type: basic", diagnostic: "auth_type_unsupported"},
-		{name: "unsupported grant", auth: "type: oauth2\n  grant: authorization_code", diagnostic: "auth_grant_unsupported"},
+		{name: "unsupported type", auth: "type: basic", diagnostic: "auth.type"},
+		{name: "unsupported grant", auth: "type: oauth2\n  grant: authorization_code", diagnostic: "auth.grant"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := collectionRoot(t)
@@ -128,11 +129,14 @@ func TestBuildTreeMarksInvalidYAMLSuffixGroupAuthAndDependentRequest(t *testing.
 			if !ok {
 				t.Fatalf("BuildTree() requests = %#v, want retained dependent request", tree.Requests)
 			}
-			if !hasDiagnosticCode(request.Diagnostics, test.diagnostic) {
-				t.Fatalf("request diagnostics = %#v, want %q", request.Diagnostics, test.diagnostic)
+			if !hasDiagnosticCode(request.Diagnostics, "group_load") {
+				t.Fatalf("request diagnostics = %#v, want group_load", request.Diagnostics)
 			}
-			if !hasDiagnosticCode(diagnostics, test.diagnostic) {
-				t.Fatalf("tree diagnostics = %#v, want %q", diagnostics, test.diagnostic)
+			if !hasDiagnosticCode(diagnostics, "group_load") {
+				t.Fatalf("tree diagnostics = %#v, want group_load", diagnostics)
+			}
+			if !strings.Contains(request.Diagnostics[0].Message, test.diagnostic) {
+				t.Fatalf("request diagnostic = %#v, want safe auth diagnostic %q", request.Diagnostics[0], test.diagnostic)
 			}
 		})
 	}

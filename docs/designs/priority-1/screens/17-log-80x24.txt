@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  [Save] * Unsaved                                 │
+│▾ payments          │Params | Headers | [Auth] | Body | Settings              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Auth: [Inherit] | None | OAuth2                          │
+│  > POST create     │Token: ********  [Show token]                            │
+│    ! broken        │                                                         │
+│                    │                                                         │
+│▸ users             │                                                         │
+│                    │                                                         │
+│                    ├─────────────────────────────────────────────────────────┤
+│                    │Response Diagnostics [Request Log]                       │
+│                    │12:06:00 resolution: complete                            │
+│                    │12:06:00 oauth: invalid_client                           │
+│                    │Host: auth.example.com | grant: client_credentials       │
+│                    │Client secret: [redacted] | token: [redacted]            │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

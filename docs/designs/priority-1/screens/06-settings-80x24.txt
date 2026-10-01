@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  Saved                                            │
+│▾ payments          │Params | Headers | Auth | Body | [Settings]              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Name: Create payment                                     │
+│  > POST create     │File: payments/create.yaml (read only)                   │
+│    ! broken        │Timeout: 30s (environment: test)                         │
+│                    │TLS certificate verification: enabled (collection)       │
+│▸ users             │Request HTTP overrides: unavailable in MVP               │
+│                    │                                                         │
+│                    ├─────────────────────────────────────────────────────────┤
+│                    │Saved. Definition updated; response remains unchanged.   │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

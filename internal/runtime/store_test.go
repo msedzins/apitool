@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -68,7 +69,12 @@ func TestResponseCachePersistsIdentityMetadataAndRedactedHeaders(t *testing.T) {
 		t.Fatalf("SaveResponse() error = %v", err)
 	}
 
-	cachePath := filepath.Join(workspace, ".apitool", "responses", "payments", "prod", "users", "list", "latest.json")
+	cacheDir := filepath.Join(workspace, ".apitool", "responses", "payments", "prod", "users", "list")
+	cachePaths, err := filepath.Glob(filepath.Join(cacheDir, ".key-*", "latest.json"))
+	if err != nil || len(cachePaths) != 1 {
+		t.Fatalf("cache paths = %#v, %v; want one identity-specific cache path", cachePaths, err)
+	}
+	cachePath := cachePaths[0]
 	raw, err := os.ReadFile(cachePath)
 	if err != nil {
 		t.Fatalf("read cache at expected isolated path: %v", err)
@@ -217,7 +223,11 @@ func TestResponseCacheRejectsTokenBearingBodyAndAPIKeyHeader(t *testing.T) {
 	if err := store.SaveResponse(safeKey, model.Response{StatusCode: 200, Headers: http.Header{"X-API-Key": {"api-key-123"}}}); err != nil {
 		t.Fatalf("SaveResponse() safe body error = %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join(workspace, ".apitool", "responses", "payments", "prod", "headers", "latest.json"))
+	cachePaths, err := filepath.Glob(filepath.Join(workspace, ".apitool", "responses", "payments", "prod", "headers", ".key-*", "latest.json"))
+	if err != nil || len(cachePaths) != 1 {
+		t.Fatalf("cache paths = %#v, %v; want one identity-specific cache path", cachePaths, err)
+	}
+	raw, err := os.ReadFile(cachePaths[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,5 +268,61 @@ func TestSaveStateMergesTwoStoresPreferences(t *testing.T) {
 	}
 	if got.LastActiveEnvironment["payments"] != "prod" || !got.PanelPreferences["response_headers_open"] {
 		t.Errorf("merged state = %#v, want both stores' updates", got)
+	}
+}
+
+func TestResponseCacheSeparatesNestedIdentityBoundaries(t *testing.T) {
+	workspace := t.TempDir()
+	store, err := runtime.Open(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstKey := runtime.Key{CollectionPath: "a/b", Environment: "c", RequestID: "d"}
+	secondKey := runtime.Key{CollectionPath: "a", Environment: "b", RequestID: "c/d"}
+	for key, body := range map[runtime.Key]string{firstKey: `{"identity":"first"}`, secondKey: `{"identity":"second"}`} {
+		if err := store.SaveResponse(key, model.Response{StatusCode: http.StatusOK, Body: []byte(body)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for key, want := range map[runtime.Key]string{firstKey: `{"identity":"first"}`, secondKey: `{"identity":"second"}`} {
+		got, err := store.LatestResponse(key)
+		if err != nil || string(got.Body) != want {
+			t.Fatalf("LatestResponse(%#v) = %q, %v; want %q", key, got.Body, err, want)
+		}
+	}
+
+	legacyWorkspace := t.TempDir()
+	legacyStore, err := runtime.Open(legacyWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(legacyWorkspace, ".apitool", "responses", "a", "b", "c", "d", "latest.json")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacy := struct {
+		CollectionPath string        `json:"collection_path"`
+		Environment    string        `json:"environment"`
+		RequestID      string        `json:"request_id"`
+		StatusCode     int           `json:"status_code"`
+		Headers        http.Header   `json:"headers"`
+		Body           []byte        `json:"body"`
+		Duration       time.Duration `json:"duration_ns"`
+		ReceivedAt     time.Time     `json:"received_at"`
+	}{CollectionPath: firstKey.CollectionPath, Environment: firstKey.Environment, RequestID: firstKey.RequestID, StatusCode: http.StatusAccepted, Body: []byte(`{"legacy":true}`)}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	matched, err := legacyStore.LatestResponse(firstKey)
+	if err != nil || string(matched.Body) != `{"legacy":true}` {
+		t.Fatalf("matching legacy cache = %q, %v; want readable response", matched.Body, err)
+	}
+	mismatched, err := legacyStore.LatestResponse(secondKey)
+	if err == nil || mismatched.StatusCode != 0 || len(mismatched.Body) != 0 {
+		t.Fatalf("mismatched legacy cache = %#v, %v; must not be returned", mismatched, err)
 	}
 }

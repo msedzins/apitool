@@ -47,6 +47,8 @@ func TestEffectiveResolvesScalarRequestFieldsAndAuth(t *testing.T) {
 		switch name {
 		case "API_CLIENT_ID":
 			return "client-from-process", true
+		case "API_CLIENT_SECRET":
+			return "secret-from-process", true
 		case "API_HOST":
 			return "gateway.example.test", true
 		case "API_VERSION":
@@ -66,6 +68,7 @@ func TestEffectiveResolvesScalarRequestFieldsAndAuth(t *testing.T) {
 	}
 	collection := collectionWithOAuth()
 	collection.Auth.ClientID = "${API_CLIENT_ID}"
+	collection.Auth.ClientSecret = "${API_CLIENT_SECRET}"
 	collection.Auth.TokenURL = "{{token_url}}"
 	environment := testEnvironment()
 	environment.Variables["base_url"] = "https://{{host}}/${API_HOST}"
@@ -119,8 +122,8 @@ func TestEffectiveDoesNotUseRequestValuesAsVariables(t *testing.T) {
 }
 
 func TestEffectiveUsesNearestDefinedGroupAuth(t *testing.T) {
-	outer := model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", Scopes: []string{"outer.read"}}}
-	inner := model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", Scopes: []string{"inner.write"}}}
+	outer := model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "client", ClientSecret: "secret", Scopes: []string{"outer.read"}}}
+	inner := model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "client", ClientSecret: "secret", Scopes: []string{"inner.write"}}}
 	got, diagnostics := resolve.Effective(collectionWithOAuth(), testEnvironment(), []model.Group{outer, inner}, basicRequest())
 	if len(diagnostics) != 0 {
 		t.Fatalf("Effective() diagnostics = %#v, want none", diagnostics)
@@ -182,12 +185,12 @@ func TestEffectiveDefaultsToNoTimeoutAndVerifiedTLS(t *testing.T) {
 
 func collectionWithOAuth() model.Collection {
 	return model.Collection{Name: "API", Auth: &model.Auth{
-		Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", Scopes: []string{"collection.read"},
+		Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "client", ClientSecret: "secret", Scopes: []string{"collection.read"},
 	}}
 }
 
 func adminGroup() model.Group {
-	return model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", Scopes: []string{"admin.write"}}}
+	return model.Group{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "client", ClientSecret: "secret", Scopes: []string{"admin.write"}}}
 }
 
 func requestWithAuthNone() model.Request {
@@ -246,4 +249,50 @@ func joinedMessages(diagnostics []model.Diagnostic) string {
 		messages = append(messages, diagnostic.Message)
 	}
 	return strings.Join(messages, "\n")
+}
+
+func TestEffectiveRejectsUnsupportedInheritedAuth(t *testing.T) {
+	oldLookup := resolve.LookupEnv
+	resolve.LookupEnv = func(name string) (string, bool) {
+		switch name {
+		case "API_CLIENT_ID":
+			return "resolved-client", true
+		case "API_CLIENT_SECRET":
+			return "resolved-top-secret", true
+		default:
+			return "", false
+		}
+	}
+	t.Cleanup(func() { resolve.LookupEnv = oldLookup })
+
+	validAuth := func() *model.Auth {
+		return &model.Auth{Type: "oauth2", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "${API_CLIENT_ID}", ClientSecret: "${API_CLIENT_SECRET}"}
+	}
+	for _, test := range []struct {
+		name       string
+		collection model.Collection
+		groups     []model.Group
+		wantCode   string
+	}{
+		{name: "unsupported collection type", collection: model.Collection{Auth: &model.Auth{Type: "basic", Grant: "client_credentials", TokenURL: "https://auth.example.test/token", ClientID: "${API_CLIENT_ID}", ClientSecret: "${API_CLIENT_SECRET}"}}, wantCode: "auth_type_unsupported"},
+		{name: "unsupported nearest group grant", collection: model.Collection{Auth: validAuth()}, groups: []model.Group{{Auth: validAuth()}, {Auth: &model.Auth{Type: "oauth2", Grant: "authorization_code", TokenURL: "https://auth.example.test/token", ClientID: "${API_CLIENT_ID}", ClientSecret: "${API_CLIENT_SECRET}"}}}, wantCode: "auth_grant_unsupported"},
+		{name: "missing OAuth token URL", collection: model.Collection{Auth: &model.Auth{Type: "oauth2", Grant: "client_credentials", ClientID: "${API_CLIENT_ID}", ClientSecret: "${API_CLIENT_SECRET}"}}, wantCode: "auth_token_url_required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, diagnostics := resolve.Effective(test.collection, testEnvironment(), test.groups, basicRequest())
+			if !hasDiagnosticCode(diagnostics, test.wantCode) {
+				t.Fatalf("diagnostic codes = %v, want %q", diagnosticCodes(diagnostics), test.wantCode)
+			}
+			if messages := joinedMessages(diagnostics); strings.Contains(messages, "resolved-top-secret") {
+				t.Fatalf("diagnostics expose resolved credentials: %q", messages)
+			}
+		})
+	}
+
+	request := basicRequest()
+	request.Auth = &model.Auth{None: true}
+	_, diagnostics := resolve.Effective(model.Collection{Auth: validAuth()}, testEnvironment(), nil, request)
+	if len(diagnostics) != 0 {
+		t.Fatalf("auth none diagnostics = %#v, want none", diagnostics)
+	}
 }

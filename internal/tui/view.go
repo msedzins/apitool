@@ -172,10 +172,25 @@ func (m Model) collectionView() string {
 		if m.editorField == 6 {
 			marker = "▶ "
 		}
-		right[10] = marker + "Body (" + bodyMode + ")"
+		bodyLabel := "Body (" + bodyMode + ")"
+		if m.editor.mode == BodyModeJSON {
+			if m.jsonTextPresentation {
+				bodyLabel = "Body (JSON text)"
+			} else {
+				bodyLabel = "Body (JSON structured)"
+			}
+		}
+		right[10] = marker + bodyLabel
 		body := m.editorFieldTextFor(6)
 		bodyLines := strings.Split(body, "\n")
+		structuredBody := m.editor.mode == BodyModeJSON && !m.jsonTextPresentation
+		if structuredBody {
+			bodyLines = strings.Split(m.structuredJSONLines(), "\n")
+		}
 		cursorRow, cursorCol := bodyCursorPosition(body, m.fieldCursor)
+		if structuredBody && len(bodyLines) > 0 {
+			cursorRow = min(m.jsonCursor, len(bodyLines)-1)
+		}
 		visibleRows := 5
 		if m.editorField == 6 {
 			if cursorRow < m.bodyScroll {
@@ -192,7 +207,7 @@ func (m Model) collectionView() string {
 			}
 			line := bodyLines[lineIndex]
 			available := max(1, rightWidth-2)
-			if m.editorField == 6 && lineIndex == cursorRow {
+			if m.editorField == 6 && lineIndex == cursorRow && !structuredBody {
 				line = scrollBodyLineToCursor(line, cursorCol, available)
 			} else {
 				line = truncateRunes(line, available)
@@ -377,6 +392,8 @@ func editorHelpView() string {
 		"Requests    Ctrl+↑/↓ previous/next",
 		"Save        Ctrl+S save • Esc close",
 		"Body mode   Ctrl+B toggle JSON/raw",
+		"JSON view   Ctrl+J structured/text • type values, Enter apply",
+		"Format      Ctrl+F format JSON text safely",
 		"History     Ctrl+Z undo • Ctrl+Y redo",
 		"Actions     Ctrl+P duplicate/delete",
 		"Help        ? or Esc close",
