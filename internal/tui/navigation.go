@@ -32,6 +32,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
 	case sendFinishedMsg:
 		m.sending = false
+		m.gitAction, m.gitOutput = "", ""
 		if x.result.ConfirmationRequired {
 			selection := x.selection
 			e := m.effectiveSelection(selection)

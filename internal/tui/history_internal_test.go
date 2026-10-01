@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	"apitool/internal/app"
 	"apitool/internal/model"
 	"apitool/internal/runtime"
 
@@ -39,5 +41,18 @@ func TestEditorSplitKeepsMinimumResponseRowsAtTallLayoutThreshold(t *testing.T) 
 	_, maximum := m.responseSplitBounds(m.height)
 	if got := m.responseDivider(); got > maximum {
 		t.Fatalf("editor response split = %d, beyond maximum %d at height %d", got, maximum, m.height)
+	}
+}
+
+func TestSendReplacesPreviousGitOutput(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.mode = browseMode
+	m.width, m.height = 90, 24
+	m.gitAction, m.gitOutput = "Status", "working tree clean"
+	result := app.SendResult{Response: &model.Response{StatusCode: 201, Body: []byte("created")}}
+	next, _ := m.Update(sendFinishedMsg{result: result})
+	m = next.(Model)
+	if got := m.View(); !strings.Contains(got, "201 Created") || !strings.Contains(got, "created") || strings.Contains(got, "working tree clean") {
+		t.Fatalf("response after Git action = %q, want the new HTTP response only", got)
 	}
 }
