@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  [Save] * Unsaved                                 │
+│▾ payments          │Params | [Headers] | Auth | Body | Settings              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Name: Create payment *                                   │
+│  > POST create     │Headers (Enter edit; Insert add; Delete remove)          │
+│    ! broken        │  Key                Value                               │
+│                    │> Accept             application/json                    │
+│▸ users             │  Content-Type       application/json                    │
+│                    │                                                         │
+│                    ├─────────────────────────────────────────────────────────┤
+│                    │No response yet.                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

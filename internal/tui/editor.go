@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"apitool/internal/app"
@@ -480,7 +481,15 @@ func (m Model) editorDisplay() string {
 	if m.editor.mode == BodyModeRaw {
 		mode = "Raw"
 	}
-	labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", "Body (" + mode + ")"}
+	bodyLabel := "Body (" + mode + ")"
+	if m.editor.mode == BodyModeJSON {
+		if m.jsonTextPresentation {
+			bodyLabel = "Body (JSON text)"
+		} else {
+			bodyLabel = "Body (JSON structured)"
+		}
+	}
+	labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth", bodyLabel}
 	bodyValue := m.editorFieldTextFor(6)
 	bodyDisplay := strings.ReplaceAll(bodyValue, "\n", "\\n")
 	if m.editorField == 6 {
@@ -494,12 +503,15 @@ func (m Model) editorDisplay() string {
 			marker = "▶ "
 		}
 		value := values[index]
+		if index == 6 && m.editor.mode == BodyModeJSON && !m.jsonTextPresentation {
+			value = m.structuredJSONLines()
+		}
 		if m.editorField == index && index != 6 {
 			value = m.editorFieldText()
 		}
 		lines = append(lines, marker+label+": "+value)
 	}
-	lines = append(lines, "Edit fields with Tab/Enter and type; Ctrl+B switches body mode; Ctrl+P opens actions.")
+	lines = append(lines, "Edit fields with Tab/Enter and type; Ctrl+B JSON/Raw; Ctrl+J JSON view; Ctrl+F format; Ctrl+P actions.")
 	if m.duplicateFlow {
 		lines = append(lines, "Save as: "+m.duplicateTarget)
 		lines = append(lines, "Duplicate path is the final editor field; Ctrl+S saves the copy.")
@@ -563,4 +575,33 @@ func (m Model) editorFieldTextFor(index int) string {
 		return m.duplicateTarget
 	}
 	return m.editor.FieldText(index)
+}
+
+func (m Model) structuredJSONLines() string {
+	if m.editor == nil {
+		return ""
+	}
+	scalars, err := jsonScalars(m.editor.bodyText)
+	if err != nil {
+		return "Invalid JSON: " + err.Error()
+	}
+	if len(scalars) == 0 {
+		return "(empty JSON value)"
+	}
+	lines := make([]string, 0, len(scalars))
+	for i, scalar := range scalars {
+		marker := "  "
+		if i == m.jsonCursor {
+			marker = "> "
+		}
+		value := formatJSONScalar(scalar.value)
+		if _, ok := scalar.value.(string); ok {
+			value = strconv.Quote(scalar.value.(string))
+		}
+		if m.jsonScalarDirty && i == m.jsonCursor {
+			value = insertRuneMarker(m.jsonScalarDraft, m.jsonScalarCursor)
+		}
+		lines = append(lines, marker+scalar.label+": "+value)
+	}
+	return strings.Join(lines, "\n")
 }

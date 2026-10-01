@@ -1,0 +1,24 @@
+┌────────────────────┬─────────────────────────────────────────────────────────┐
+│Collections / tree  │▶ POST | {{base_url}}/payments                           │
+│                    │[Send]  [Save] * Unsaved                                 │
+│▾ payments          │Params | Headers | Auth | [Body] | Settings              │
+│  ▾ payments        ├─────────────────────────────────────────────────────────┤
+│    GET list        │Body type: JSON   View: Structured | Text                │
+│  > POST create     │  amount     number   1200                               │
+│    ! broken        │                                                         │
+│                    │                                                         │
+│▸ users┌──────────────────────────────────────────────────────────────┐       │
+│       │ Save failed                                                  │       │
+│       │ payments/create.yaml                                         │───────┤
+│       │ Permission denied. Your draft is retained.                   │       │
+│       │ [Retry save] [Return to editing*]                            │       │
+│       └──────────────────────────────────────────────────────────────┘       │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+│                    │                                                         │
+├────────────────────┼─────────────────────────────────────────────────────────┤
+│Collection: payments│Environment: test | Git: design preview                  │
+│? Help              │Tab panes | Ctrl+S save | Ctrl+Enter send                │
+└────────────────────┴─────────────────────────────────────────────────────────┘

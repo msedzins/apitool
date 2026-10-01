@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,10 +24,272 @@ func TestDirtyRequestPromptsBeforeNavigation(t *testing.T) {
 	}
 }
 
+func TestEditorOpenMovesFocusToRequestPane(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editor = nil
+	m.mode = browseMode
+	m.focus = collectionPane
+	for i, row := range m.visibleRows() {
+		if row.kind == requestRow {
+			m.treeIndex = i
+			break
+		}
+	}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = next.(Model)
+	if m.mode != requestEditMode || m.focus != requestPane {
+		t.Fatalf("after opening editor mode=%v focus=%v, want editor/request", m.mode, m.focus)
+	}
+}
+
+func TestMouseSelectsEditorField(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.width, m.height = 100, 30
+	view := strings.Split(m.View(), "\n")
+	urlRow := -1
+	for i, line := range view {
+		if strings.Contains(line, "URL:") {
+			urlRow = i
+			break
+		}
+	}
+	if urlRow < 0 {
+		t.Fatalf("URL field not rendered: %q", m.View())
+	}
+	next, _ := m.Update(tea.MouseMsg{X: m.explorerWidth() + 3, Y: urlRow, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = next.(Model)
+	if m.editorField != 2 || m.fieldDraft != "https://example.test/onex" {
+		t.Fatalf("after click/type field=%d draft=%q", m.editorField, m.fieldDraft)
+	}
+	if got := m.editor.Request().Name; got != "One" {
+		t.Fatalf("clicking URL edited Name: %q", got)
+	}
+	draft := m.fieldDraft
+	next, _ = m.Update(tea.MouseMsg{X: 2, Y: urlRow, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	m = next.(Model)
+	if m.editorField != 2 || m.fieldDraft != draft {
+		t.Fatal("click outside editor controls changed the active field")
+	}
+}
+
+func TestQuestionMarkIsEditableRequestText(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	m.editorField = 2
+	m.fieldDraft = m.editor.FieldText(2)
+	m.fieldDraftDirty = false
+	m.fieldCursor = len([]rune(m.fieldDraft))
+	m.replaceField = false
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = next.(Model)
+	if m.help {
+		t.Fatal("question mark opened help while editing a URL")
+	}
+	if got := m.fieldDraft; !strings.HasSuffix(got, "?") {
+		t.Fatalf("URL draft = %q, want literal question mark", got)
+	}
+}
+
+func TestUndoRestoresInvalidFieldDraft(t *testing.T) {
+	for _, field := range []int{3, 4, 5} {
+		t.Run(fmt.Sprintf("field-%d", field), func(t *testing.T) {
+			m := editorWithJSON(t, `{"a":1}`)
+			m.editorField = field
+			m.fieldDraft = m.editor.FieldText(field)
+			m.fieldDraftDirty = false
+			m.fieldCursor = len([]rune(m.fieldDraft))
+			m.replaceField = false
+			before := m.fieldDraft
+			next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+			m = next.(Model)
+			next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
+			m = next.(Model)
+			if m.fieldDraft != before {
+				t.Fatalf("undo draft = %q, want %q", m.fieldDraft, before)
+			}
+		})
+	}
+}
+
+func TestStructuredJSONEditsNestedValues(t *testing.T) {
+	m := editorWithJSON(t, `{"enabled":true,"items":[1,2],"large":9007199254740993,"profile":{"name":"Ada"}}`)
+	m.editorField = 6
+	m.jsonCursor = 4 // profile.name; keys and array entries have stable display order.
+	if !strings.Contains(m.structuredJSONLines(), "$.profile.name") {
+		t.Fatalf("structured view = %q", m.structuredJSONLines())
+	}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = next.(Model)
+	for _, r := range "Grace" {
+		next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+		m = next.(Model)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m.jsonCursor = 1 // items[0]
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
+	m = next.(Model)
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	m.jsonCursor = 0 // enabled
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = next.(Model)
+	for _, r := range "false" {
+		next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+		m = next.(Model)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	request, err := m.editor.validatedRequest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := request.Request.Body.Content.(map[string]any)
+	if content["enabled"] != false || string(content["items"].([]any)[0].(model.JSONNumber)) != "7" || content["profile"].(map[string]any)["name"] != "Grace" || string(content["large"].(model.JSONNumber)) != "9007199254740993" {
+		t.Fatalf("structured JSON result = %#v", content)
+	}
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatalf("Save rejected structured JSON: %s", m.editor.Validation())
+	}
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	saved, err := collection.LoadRequest(filepath.Join(m.view.Root, ".api", "requests", "one.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	savedContent := saved.Request.Body.Content.(map[string]any)
+	if fmt.Sprint(savedContent["large"]) != "9007199254740993" || fmt.Sprint(savedContent["items"].([]any)[0]) != "7" {
+		t.Fatalf("saved JSON lost values or precision: %#v", savedContent)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = next.(Model)
+	if !m.jsonTextPresentation || m.editor.mode != BodyModeJSON || !strings.Contains(m.editorDisplay(), "Body (JSON text)") {
+		t.Fatalf("JSON text presentation toggle = %q", m.editorDisplay())
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	m = next.(Model)
+	if m.editor.mode != BodyModeRaw {
+		t.Fatal("Ctrl+B did not switch payload type to Raw")
+	}
+}
+
+func TestPendingStructuredScalarDraftBlocksNavigation(t *testing.T) {
+	for _, action := range []string{"escape", "request-navigation"} {
+		t.Run(action, func(t *testing.T) {
+			m := editorWithJSON(t, `{"a":1}`)
+			m.editorField = 6
+			next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("9")})
+			m = next.(Model)
+			if action == "escape" {
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			} else {
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlDown})
+			}
+			m = next.(Model)
+			if m.prompt == nil || m.prompt.kind != confirmDirtyNavigation {
+				t.Fatal("pending scalar draft did not block navigation with a discard/save prompt")
+			}
+			if action == "request-navigation" {
+				target := m.prompt.targetID
+				next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+				m = next.(Model)
+				if m.editor.Selection().RequestID != target || m.jsonScalarDirty || m.jsonScalarDraft != "" {
+					t.Fatalf("discard navigation carried scalar draft into request %q", m.editor.Selection().RequestID)
+				}
+			}
+		})
+	}
+}
+
+func TestStructuredScalarBackspaceEditsOnlySelectedValue(t *testing.T) {
+	m := editorWithJSON(t, `{"a":"old"}`)
+	m.editorField = 6
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("x")},
+		{Type: tea.KeyBackspace},
+		{Type: tea.KeyRunes, Runes: []rune("y")},
+		{Type: tea.KeyEnter},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	content := m.editor.Request().Request.Body.Content.(map[string]any)
+	if content["a"] != "oldy" {
+		t.Fatalf("structured scalar after append/backspace = %#v", content["a"])
+	}
+}
+
+func TestStructuredScalarCursorMovesBeforeEditing(t *testing.T) {
+	m := editorWithJSON(t, `{"a":"old"}`)
+	m.editorField = 6
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyHome},
+		{Type: tea.KeyDelete},
+		{Type: tea.KeyRunes, Runes: []rune("X")},
+		{Type: tea.KeyEnter},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	content := m.editor.Request().Request.Body.Content.(map[string]any)
+	if content["a"] != "Xld" {
+		t.Fatalf("structured scalar after Home/Delete/insert = %#v", content["a"])
+	}
+}
+
+func TestStructuredJSONScrollFollowsSelectedScalar(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}`)
+	m.width, m.height = 100, 30
+	m.editorField = 6
+	m.jsonCursor = 6
+	view := m.View()
+	if !strings.Contains(view, "> $.g: 7") {
+		t.Fatalf("selected structured scalar is not visible in the scrolled body pane: %q", view)
+	}
+}
+
+func TestUndoAfterCommittingFieldRestoresTypedValue(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	for _, key := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("N")},
+		{Type: tea.KeyRunes, Runes: []rune("ew")},
+		{Type: tea.KeyTab},
+		{Type: tea.KeyCtrlZ},
+	} {
+		next, _ := m.Update(key)
+		m = next.(Model)
+	}
+	if got := m.editor.Request().Name; got != "One" {
+		t.Fatalf("Ctrl+Z after Tab restored draft text but typed value is %q", got)
+	}
+	cmd := m.Save()
+	if cmd == nil {
+		t.Fatalf("save failed after undo: %s", m.editor.Validation())
+	}
+	next, _ := m.Update(cmd())
+	m = next.(Model)
+	saved, err := collection.LoadRequest(filepath.Join(m.view.Root, ".api", "requests", "one.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Name != "One" {
+		t.Fatalf("saved Name after undo = %q", saved.Name)
+	}
+}
+
 func TestJSONModePrettyPrintsAndRawModePreservesRawBytes(t *testing.T) {
 	m := editorWithJSON(t, `{"a":1}`)
-	if !strings.Contains(m.View(), `"a": 1`) {
-		t.Fatalf("JSON editor view = %q, want pretty JSON", m.View())
+	if !strings.Contains(m.View(), "$.a: 1") || !strings.Contains(m.View(), "JSON structured") {
+		t.Fatalf("JSON editor view = %q, want structured JSON controls", m.View())
+	}
+	m.jsonTextPresentation = true
+	if !strings.Contains(m.editorDisplay(), `"a": 1`) {
+		t.Fatalf("JSON text presentation = %q", m.editorDisplay())
 	}
 	m.editor.SwitchBodyMode(BodyModeRaw)
 	m.editor.SetBodyText("<a>1</a>")
@@ -616,6 +879,7 @@ func TestBodyKeyboardSupportsCursorMovementAndNewlines(t *testing.T) {
 
 func TestHelpOpensFromEditorWithoutChangingDraft(t *testing.T) {
 	m := editorWithJSON(t, `{"a":1}`)
+	m.editorField = -1 // help remains available when no text control is active
 	before := m.fieldDraft
 	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
 	if !m.help {
