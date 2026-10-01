@@ -17,9 +17,9 @@
 │                       │ Send        Ctrl+J (Ctrl+Enter/LF)               │                       │
 │                       │ Auth        Ctrl+A view • s Show token           │                       │
 │                       │ Response    ←/→ tabs • ↑/↓ scroll • b raw        │                       │
-│                       │ Search      / find request                       │                       │
+│                       │ Search      / find • Ctrl+K History and Git      │                       │
 │                       │ Request     e edit selected request              │                       │
-│                       │ Layout      Ctrl+←/→ resize split                │                       │
+│                       │ Layout      Ctrl+←/→ explorer • Alt+↑/↓ panels   │                       │
 │                       │ Help        ? or Esc close                       │                       │
 │                       │ Exit        Ctrl+C quit                          │                       │
 │                       └──────────────────────────────────────────────────┘                       │

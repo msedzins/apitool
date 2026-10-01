@@ -39,10 +39,11 @@ type Store struct {
 }
 
 type State struct {
-	LastActiveEnvironment map[string]string `json:"last_active_environment"`
-	PanelPreferences      map[string]bool   `json:"panel_preferences"`
-	ActiveCollection      string            `json:"active_collection,omitempty"`
-	ExplorerWidth         int               `json:"explorer_width,omitempty"`
+	LastActiveEnvironment       map[string]string `json:"last_active_environment"`
+	PanelPreferences            map[string]bool   `json:"panel_preferences"`
+	ActiveCollection            string            `json:"active_collection,omitempty"`
+	ExplorerWidth               int               `json:"explorer_width,omitempty"`
+	RequestResponseSplitPercent int               `json:"request_response_split_percent,omitempty"`
 }
 
 type cachedResponse struct {
@@ -161,6 +162,9 @@ func (s *Store) SaveState(state State) error {
 		if state.ExplorerWidth != 0 {
 			existing.ExplorerWidth = state.ExplorerWidth
 		}
+		if state.RequestResponseSplitPercent != 0 {
+			existing.RequestResponseSplitPercent = state.RequestResponseSplitPercent
+		}
 		data, err := json.Marshal(existing)
 		if err != nil {
 			return fmt.Errorf("encode runtime state: %w", err)
@@ -220,6 +224,9 @@ func validateState(state State) error {
 	}
 	if state.ExplorerWidth < 0 || state.ExplorerWidth > 10000 {
 		return errors.New("explorer width is invalid")
+	}
+	if state.RequestResponseSplitPercent < 0 || state.RequestResponseSplitPercent > 100 {
+		return errors.New("request/response split percentage is invalid")
 	}
 	for collection, environment := range state.LastActiveEnvironment {
 		if _, err := safePath(collection, "state collection path", true); err != nil {

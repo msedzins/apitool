@@ -9,6 +9,7 @@ import (
 	"apitool/internal/app"
 	"apitool/internal/auth"
 	"apitool/internal/model"
+	"apitool/internal/runtime"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -38,6 +39,8 @@ const (
 	environmentPickerMode
 	searchMode
 	requestEditMode
+	historyMode
+	gitCommitMode
 )
 
 // Model is the application shell. It deliberately exposes only Bubble Tea's
@@ -94,6 +97,17 @@ type Model struct {
 	prompt                                       *confirmation
 	duplicateFlow                                bool
 	duplicateTarget                              string
+	responseSplitPercent                         int
+	responseSplitDragging                        bool
+	historyEntries                               []runtime.HistoryEntry
+	historyIndex                                 int
+	historyQuery                                 string
+	historyReturnMode                            mode
+	paletteReturnMode                            mode
+	gitCommitMessage                             string
+	gitBusy                                      bool
+	gitAction                                    string
+	gitOutput                                    string
 }
 
 type fieldDraftSnapshot struct {
@@ -129,6 +143,7 @@ func New(service *app.Service, options Options) tea.Model {
 			options.StartingCollection = preferences.ActiveCollection
 		}
 		m.explorer = preferences.ExplorerWidth
+		m.responseSplitPercent = preferences.RequestResponseSplitPercent
 	}
 	if options.StartingCollection != "" {
 		m.openCollection(options.StartingCollection)
@@ -167,7 +182,7 @@ func (m *Model) openCollection(path string) {
 		for _, group := range view.Tree.Groups {
 			m.expanded[group.ID] = true
 		}
-		_ = m.service.SaveUIPreferences(path, m.explorer)
+		m.savePreferences()
 		m.selectEnvironment(environment)
 		return
 	}
@@ -175,7 +190,7 @@ func (m *Model) openCollection(path string) {
 	for _, group := range view.Tree.Groups {
 		m.expanded[group.ID] = true
 	}
-	_ = m.service.SaveUIPreferences(path, m.explorer)
+	m.savePreferences()
 }
 
 func (m *Model) selectEnvironment(environment string) {

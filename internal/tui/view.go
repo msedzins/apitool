@@ -54,6 +54,12 @@ func (m Model) View() string {
 	if m.prompt != nil {
 		return m.confirmationView()
 	}
+	if m.mode == historyMode {
+		return m.historyView()
+	}
+	if m.mode == gitCommitMode {
+		return m.gitCommitView()
+	}
 	if m.mode == requestEditMode && m.height > 0 && m.height < 22 {
 		view := m.editorDisplay()
 		if lines := m.responseLines(); len(lines) > 0 {
@@ -151,9 +157,8 @@ func (m Model) collectionView() string {
 			right[5] = " Request: " + request.ID
 		}
 	}
-	responseDivider := 8
+	responseDivider := m.responseDivider()
 	if m.mode == requestEditMode && m.editor != nil && height >= 22 {
-		responseDivider = 17
 		labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth"}
 		for index, label := range labels {
 			row := index + 4
@@ -334,9 +339,9 @@ func (m Model) helpView(background string) string {
 		"│ Send        Ctrl+J (Ctrl+Enter/LF)               │",
 		"│ Auth        Ctrl+A view • s Show token           │",
 		"│ Response    ←/→ tabs • ↑/↓ scroll • b raw        │",
-		"│ Search      / find request                       │",
+		"│ Search      / find • Ctrl+K History and Git      │",
 		"│ Request     e edit selected request              │",
-		"│ Layout      Ctrl+←/→ resize split                │",
+		"│ Layout      Ctrl+←/→ explorer • Alt+↑/↓ panels   │",
 		"│ Help        ? or Esc close                       │",
 		"│ Exit        Ctrl+C quit                          │",
 		"└" + strings.Repeat("─", 50) + "┘",
@@ -412,12 +417,43 @@ func compactHelpView() string {
 		"Send        Ctrl+J (Ctrl+Enter/LF)",
 		"Auth        Ctrl+A view • s Show token",
 		"Response    ←/→ tabs • ↑/↓ scroll • b raw",
-		"Search      / find request",
+		"Search      / find • Ctrl+K History and Git",
 		"Request     e edit selected request",
-		"Layout      Ctrl+←/→ resize split",
+		"Layout      Ctrl+←/→ explorer • Alt+↑/↓ panels",
 		"Help        ? or Esc close",
 		"Exit        Ctrl+C quit",
 	}, "\n") + "\n"
+}
+
+func (m Model) responseDivider() int {
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+	row := 8
+	if m.mode == requestEditMode && m.editor != nil && height >= 22 {
+		row = 17
+	}
+	if m.responseSplitPercent > 0 {
+		row = (height*m.responseSplitPercent + 50) / 100
+	}
+	minimumRequest, maximumRequest := m.responseSplitBounds(height)
+	return max(minimumRequest, min(row, maximumRequest))
+}
+
+func (m Model) responseSplitBounds(height int) (minimum, maximum int) {
+	minimumRequest, minimumResponse := 8, 4
+	if m.mode == requestEditMode && m.editor != nil {
+		minimumRequest, minimumResponse = 16, 2
+	}
+	if height < 18 {
+		minimumRequest = max(3, height/3)
+	}
+	if height < 14 {
+		minimumResponse = 2
+	}
+	maximum = height - minimumResponse - 6
+	return min(minimumRequest, maximum), maximum
 }
 
 func (m Model) compactCollectionView() string {
