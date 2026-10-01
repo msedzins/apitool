@@ -59,6 +59,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitAction, m.gitOutput = x.action, x.output
 		if x.err != nil {
 			m.gitOutput = strings.TrimSpace(strings.TrimSpace(x.output) + "\n" + x.err.Error())
+		} else if x.action == "Pull" {
+			if err := m.reloadAfterPull(); err != nil {
+				m.gitOutput = strings.TrimSpace(m.gitOutput + "\nCould not reload workspace: " + err.Error())
+			}
 		}
 		m.responseOffset = 0
 		m.message = "Git: " + x.action
@@ -77,6 +81,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if x.Type == tea.KeyCtrlC {
 			return m, tea.Quit
+		}
+		if m.gitBusy {
+			return m, nil
 		}
 		if m.saving {
 			return m, nil
@@ -120,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.handleKey(x)
 	case tea.MouseMsg:
-		if !m.help && m.prompt == nil && !m.saving {
+		if !m.gitBusy && !m.help && m.prompt == nil && !m.saving {
 			if m.handleResponseSplitMouse(x) {
 				return m, nil
 			}
@@ -286,6 +293,10 @@ func (m *Model) handleSearch(k tea.KeyMsg) {
 func (m *Model) handleCollectionPicker(k tea.KeyMsg) {
 	switch k.Type {
 	case tea.KeyEsc:
+		if diagnostic := collectionLoadDiagnostic(m.view); diagnostic != nil {
+			m.message = diagnostic.Path + ": " + diagnostic.Message
+			return
+		}
 		m.mode = browseMode
 	case tea.KeyEnter:
 		if len(m.collections) > 0 {
