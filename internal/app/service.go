@@ -529,3 +529,42 @@ func deletionPaths(target string, group bool) ([]string, error) {
 	sort.Strings(paths)
 	return paths, err
 }
+
+// AuthToken resolves the selected request's OAuth configuration and retrieves a
+// token solely for the current interactive session. It never writes runtime data.
+func (s *Service) AuthToken(ctx context.Context, selection Selection) (*model.Auth, auth.Token, *model.ExecutionError) {
+	view, err := s.collection(selection.Collection)
+	if err != nil {
+		return nil, auth.Token{}, executionResult(err).ExecutionError
+	}
+	if selection.Environment == "" {
+		selection.Environment = view.Environment
+	}
+	env, ok := view.Environments[selection.Environment]
+	if !ok {
+		return nil, auth.Token{}, &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Select a valid environment"}
+	}
+	node, ok := view.Tree.Requests[selection.RequestID]
+	if !ok {
+		return nil, auth.Token{}, &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Select a valid request"}
+	}
+	groups := make([]model.Group, len(node.Groups))
+	for i, g := range node.Groups {
+		groups[i] = g.Group
+	}
+	e, diagnostics := resolve.Effective(view.Collection, env, groups, node.Request)
+	if hasErrors(diagnostics) {
+		return nil, auth.Token{}, &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Request definition is invalid"}
+	}
+	if e.Auth == nil || e.Auth.None || e.Auth.Type == "none" {
+		return nil, auth.Token{}, nil
+	}
+	token, err := s.deps.TokenProvider.Token(ctx, *e.Auth)
+	config := *e.Auth
+	config.ClientSecret = ""
+	config.ClientID = ""
+	if err != nil {
+		return &config, auth.Token{}, &model.ExecutionError{Stage: model.StageOAuth, Category: model.CategoryOAuth, SafeMessage: "OAuth token request failed"}
+	}
+	return &config, token, nil
+}

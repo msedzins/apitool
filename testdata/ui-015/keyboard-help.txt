@@ -14,15 +14,15 @@
 │                       │ Tree        ←/→ expand/collapse                  │                       │
 │                       │ Workspace   Ctrl+P collections                   │                       │
 │                       │ Environment Ctrl+E select env                    │                       │
+│                       │ Send        Ctrl+J (Ctrl+Enter/LF)               │                       │
+│                       │ Auth        Ctrl+A view • s Show token           │                       │
+│                       │ Response    ←/→ tabs • ↑/↓ scroll • b raw        │                       │
 │                       │ Search      / find request                       │                       │
 │                       │ Request     e edit selected request              │                       │
 │                       │ Layout      Ctrl+←/→ resize split                │                       │
 │                       │ Help        ? or Esc close                       │                       │
 │                       │ Exit        Ctrl+C quit                          │                       │
 │                       └──────────────────────────────────────────────────┘                       │
-│                            │                                                                     │
-│                            │                                                                     │
-│                            │                                                                     │
 │                            │                                                                     │
 ├────────────────────────────┼─────────────────────────────────────────────────────────────────────┤
 │ Collection: payments       │ Environment: test                                                   │

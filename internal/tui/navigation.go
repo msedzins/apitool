@@ -29,6 +29,23 @@ type treeRow struct {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch x := msg.(type) {
+	case sendFinishedMsg:
+		m.sending = false
+		if x.result.ConfirmationRequired {
+			selection := x.selection
+			e := m.effectiveSelection(selection)
+			m.sendPrompt = &sendConfirmation{selection: selection, method: e.Method, url: safeRequestURL(e)}
+		} else {
+			m.result = x.result
+			m.responseOffset = 0
+		}
+		return m, nil
+	case authFinishedMsg:
+		m.authLoading = false
+		if sameSelection(m.authSelection, x.selection) {
+			m.authConfig, m.authToken, m.authFailure = x.config, x.token, x.failure
+		}
+		return m, nil
 	case requestSavedMsg:
 		return m, m.handleRequestSaved(x)
 	case deleteFinishedMsg:
@@ -56,11 +73,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prompt != nil {
 			return m, m.handleConfirmation(x)
 		}
+		if handled, cmd := m.executionKey(x); handled {
+			return m, cmd
+		}
 		if m.mode == requestEditMode && x.Type == tea.KeyRunes && string(x.Runes) == "?" {
 			m.help = true
 			return m, nil
 		}
 		if m.mode == requestEditMode {
+			if m.sending {
+				return m, nil
+			}
 			return m, m.handleEditorKey(x)
 		}
 		if x.Type == tea.KeyRunes && string(x.Runes) == "?" {
@@ -69,7 +92,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.handleKey(x)
 	case tea.MouseMsg:
-		if !m.help {
+		if !m.help && m.prompt == nil && !m.saving {
+			if handled, cmd := m.executionMouse(x); handled {
+				return m, cmd
+			}
 			m.handleMouse(x)
 		}
 	}
