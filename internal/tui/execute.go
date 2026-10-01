@@ -56,7 +56,7 @@ func (m Model) effectiveSelection(selection app.Selection) model.EffectiveReques
 	return e
 }
 func (m *Model) beginSend() tea.Cmd {
-	if m.sending || m.saving {
+	if m.sending || m.saving || m.authLoading {
 		return nil
 	}
 	selection, ok := m.executionSelection()
@@ -151,7 +151,7 @@ func (m *Model) handleSendConfirmation(k tea.KeyMsg) tea.Cmd {
 }
 func (m *Model) openAuth() tea.Cmd {
 	selection, ok := m.executionSelection()
-	if !ok || m.authLoading {
+	if !ok || m.authLoading || m.sending || m.saving {
 		return nil
 	}
 	m.authOpen = true

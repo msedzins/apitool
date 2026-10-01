@@ -151,3 +151,47 @@ func TestBusyBlocksEnvironmentMutation(t *testing.T) {
 		t.Fatal("environment can mutate during send")
 	}
 }
+
+func TestAuthCannotStartDuringSendOrSave(t *testing.T) {
+	for _, busy := range []string{"send", "save"} {
+		t.Run(busy, func(t *testing.T) {
+			m, _ := requestScreenWithAuth(t, "GET", false, sessionTokenProvider{})
+			var next tea.Model = m
+			if busy == "send" {
+				next, _ = m.Update(sendKey())
+			} else {
+				m.saving = true
+				next = m
+			}
+			next, cmd := next.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+			if cmd != nil || strings.Contains(next.View(), "Loading token") {
+				t.Fatal("Auth started while", busy)
+			}
+		})
+	}
+}
+func TestSendWaitsForAuthCompletionEvenAfterOverlayCloses(t *testing.T) {
+	m, calls := requestScreenWithAuth(t, "GET", false, sessionTokenProvider{})
+	next, authCmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+	if authCmd == nil {
+		t.Fatal("missing Auth command")
+	}
+	next, cmd := next.Update(sendKey())
+	if cmd != nil || *calls != 0 {
+		t.Fatal("Send started during Auth")
+	}
+	next, _ = next.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = next.Update(sendKey())
+	if cmd != nil || *calls != 0 {
+		t.Fatal("closing Auth released busy guard")
+	}
+	next, _ = next.Update(authCmd())
+	next, cmd = next.Update(sendKey())
+	if cmd == nil {
+		t.Fatal("Auth completion did not release Send")
+	}
+	next, _ = next.Update(cmd())
+	if *calls != 1 {
+		t.Fatal("completed send count", *calls)
+	}
+}

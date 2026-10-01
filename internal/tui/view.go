@@ -411,7 +411,17 @@ func (m Model) compactCollectionView() string {
 	}
 	rightBottom := []string{"Response / diagnostics", m.message, "Focus: " + m.focusName(), "Tab panes • Ctrl+P collections • Ctrl+E environments • / search"}
 	if lines := m.responseLines(); len(lines) > 0 {
-		rightBottom = append([]string{"Response / diagnostics"}, lines...)
+		width, height := m.width, m.height
+		if width <= 0 {
+			width = 80
+		}
+		if height <= 0 {
+			height = 24
+		}
+		lines = wrapLines(lines, max(1, width-m.explorerWidth()-1))
+		capacity := max(1, height-height/2-1)
+		offset := min(m.responseOffset, max(0, len(lines)-capacity))
+		rightBottom = append([]string{"Response / diagnostics"}, lines[offset:]...)
 	}
 	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
 }

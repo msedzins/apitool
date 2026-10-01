@@ -136,3 +136,17 @@ func TestResponsePaneScrollAndRawToggle(t *testing.T) {
 		t.Fatal("raw body lost")
 	}
 }
+
+func TestCompactResponseScrollsThroughWrappedBody(t *testing.T) {
+	m, _ := requestScreen(t, "GET", false)
+	m.width, m.height = 60, 10
+	m.focus = responsePane
+	next, _ := m.Update(sendFinishedMsg{result: app.SendResult{Response: &model.Response{StatusCode: 200, Body: []byte("first\nsecond\nthird\nfourth\nfifth\nlast-visible-body-line")}}})
+	before := next.View()
+	for i := 0; i < 30; i++ {
+		next, _ = next.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if next.View() == before || !strings.Contains(next.View(), "last-visible-body-line") {
+		t.Fatalf("compact scroll did not reveal body tail: %s", next.View())
+	}
+}
