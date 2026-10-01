@@ -58,8 +58,8 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [UI-011 — Render execution diagnostics](#ui-011) | UI | TUI | R-009 | T-004, T-006, T-010 | planned |
 | [UI-012 — Reveal a token only for the session](#ui-012) | UI | TUI | R-013 | T-010 | implemented |
 | [DATA-001 — Isolate cached responses by environment](#data-001) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
-| [DATA-002 — Redact runtime records](#data-002) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
-| [DATA-003 — Keep runtime state out of Git](#data-003) | DATA | Filesystem/Git | R-010 | T-005, T-012 | planned |
+| [DATA-002 — Redact runtime records](#data-002) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | implemented |
+| [DATA-003 — Keep runtime state out of Git](#data-003) | DATA | Filesystem/Git | R-010 | T-005, T-012 | implemented |
 | [UI-013 — Reopen a request from history](#ui-013) | UI | TUI | R-014 | T-005, T-011 | planned |
 | [UI-014 — Run safe Git actions](#ui-014) | UI | TUI, Filesystem/Git | R-014 | T-007, T-011 | planned |
 | [WF-001 — Complete the local multi-collection workflow](#wf-001) | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | planned |
@@ -928,7 +928,7 @@ Priority-1 screen proposals: [13](../designs/priority-1/gallery.md#13-cached).
 **Observable surface:** TUI, Filesystem/Git<br>
 **Requirements:** R-010<br>
 **Tasks:** T-005, T-012<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -955,7 +955,7 @@ Priority-1 screen proposals: [17](../designs/priority-1/gallery.md#17-log).
 **Observable surface:** Filesystem/Git<br>
 **Requirements:** R-010<br>
 **Tasks:** T-005, T-012<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
