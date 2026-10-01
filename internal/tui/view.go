@@ -45,11 +45,20 @@ func statusColor(c int) lipgloss.Color {
 	return "10"
 }
 func (m Model) View() string {
+	if m.sendPrompt != nil {
+		return m.executionConfirmationView()
+	}
+	if m.authOpen {
+		return m.authView()
+	}
 	if m.prompt != nil {
 		return m.confirmationView()
 	}
 	if m.mode == requestEditMode && m.height > 0 && m.height < 22 {
 		view := m.editorDisplay()
+		if lines := m.responseLines(); len(lines) > 0 {
+			view += "\nResponse / Diagnostics / Request Log\n" + strings.Join(lines, "\n") + "\n"
+		}
 		if m.help {
 			return m.helpView(view)
 		}
@@ -105,12 +114,12 @@ func (m Model) collectionView() string {
 			if m.focus == requestPane {
 				urlWidth = 46
 			}
-			right[1] = fmt.Sprintf("%s%s | %-*s[ Send ]", panePrefix(m.focus == requestPane), request.Request.Method, urlWidth, request.Request.Request.URL)
+			right[1] = fmt.Sprintf("%s%s | %-*s[ Send ]", panePrefix(m.focus == requestPane), request.Request.Method, urlWidth, safeURL(request.Request.Request.URL))
 		}
 	}
 	if height > 3 {
 		if m.mode == requestEditMode && m.editor != nil {
-			right[3] = "Tab next • Enter newline • Ctrl+S save • ? help"
+			right[3] = "Tab next • Ctrl+S save • Ctrl+J send • Ctrl+A Auth"
 		} else {
 			right[3] = " Params | Headers | Auth | Body | Settings"
 		}
@@ -244,6 +253,27 @@ func (m Model) collectionView() string {
 			right[warningRow] = fmt.Sprintf(" %d warning(s) in collection", len(m.view.Tree.Invalid))
 		}
 	}
+	if lines := m.responseLines(); len(lines) > 0 {
+		lines = wrapLines(lines, rightWidth-1)
+		capacity := max(1, height-4-(responseDivider+2))
+		offset := min(m.responseOffset, max(0, len(lines)-capacity))
+		for i, line := range lines[offset:] {
+			if i >= capacity {
+				break
+			}
+			right[responseDivider+2+i] = " " + line
+		}
+	}
+	// Keep the Send action visible even when a resolved URL is long.
+	if height > 1 {
+		heading := right[1]
+		if (strings.Contains(heading, "[ Send ]") && len([]rune(heading)) > rightWidth) || m.mode == requestEditMode {
+			if pos := strings.Index(heading, "[ Send ]"); pos >= 0 {
+				heading = heading[:pos]
+			}
+			right[1] = pad(heading, max(0, rightWidth-8)) + "[ Send ]"
+		}
+	}
 	statusDivider := height - 4
 	if statusDivider+1 < height {
 		left[statusDivider+1] = " Collection: " + m.collection
@@ -301,6 +331,9 @@ func (m Model) helpView(background string) string {
 		"│ Tree        ←/→ expand/collapse                  │",
 		"│ Workspace   Ctrl+P collections                   │",
 		"│ Environment Ctrl+E select env                    │",
+		"│ Send        Ctrl+J (Ctrl+Enter/LF)               │",
+		"│ Auth        Ctrl+A view • s Show token           │",
+		"│ Response    ←/→ tabs • ↑/↓ scroll • b raw        │",
 		"│ Search      / find request                       │",
 		"│ Request     e edit selected request              │",
 		"│ Layout      Ctrl+←/→ resize split                │",
@@ -376,6 +409,9 @@ func compactHelpView() string {
 		"Tree        ←/→ expand/collapse",
 		"Workspace   Ctrl+P collections",
 		"Environment Ctrl+E select env",
+		"Send        Ctrl+J (Ctrl+Enter/LF)",
+		"Auth        Ctrl+A view • s Show token",
+		"Response    ←/→ tabs • ↑/↓ scroll • b raw",
 		"Search      / find request",
 		"Request     e edit selected request",
 		"Layout      Ctrl+←/→ resize split",
@@ -391,6 +427,19 @@ func (m Model) compactCollectionView() string {
 		rightTop = append(rightTop, "Search: "+m.query+"  (Enter select, Esc cancel)")
 	}
 	rightBottom := []string{"Response / diagnostics", m.message, "Focus: " + m.focusName(), "Tab panes • Ctrl+P collections • Ctrl+E environments • / search"}
+	if lines := m.responseLines(); len(lines) > 0 {
+		width, height := m.width, m.height
+		if width <= 0 {
+			width = 80
+		}
+		if height <= 0 {
+			height = 24
+		}
+		lines = wrapLines(lines, max(1, width-m.explorerWidth()-1))
+		capacity := max(1, height-height/2-1)
+		offset := min(m.responseOffset, max(0, len(lines)-capacity))
+		rightBottom = append([]string{"Response / diagnostics"}, lines[offset:]...)
+	}
 	return spatial(left, rightTop, rightBottom, m.explorerWidth(), m.width, m.height)
 }
 

@@ -7,6 +7,8 @@ import (
 	"sort"
 
 	"apitool/internal/app"
+	"apitool/internal/auth"
+	"apitool/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -41,8 +43,21 @@ const (
 // Model is the application shell. It deliberately exposes only Bubble Tea's
 // Model interface so request editing and execution can be added independently.
 type Model struct {
-	service *app.Service
-	view    app.CollectionView
+	confirmDangerous                     bool
+	sending                              bool
+	sendSelection                        app.Selection
+	sendPrompt                           *sendConfirmation
+	result                               app.SendResult
+	responseOffset, responseTab          int
+	rawResponse                          bool
+	authOpen, authLoading, tokenRevealed bool
+	authSelection                        app.Selection
+	authToken                            auth.Token
+	authConfig                           *model.Auth
+	authFailure                          *model.ExecutionError
+	authOffset                           int
+	service                              *app.Service
+	view                                 app.CollectionView
 
 	collections                                  []string
 	collection                                   string
@@ -91,7 +106,7 @@ type fieldDraftSnapshot struct {
 
 // New creates a shell around a workspace already opened by service.
 func New(service *app.Service, options Options) tea.Model {
-	m := Model{service: service, vim: options.VimMode, color: options.Color, expanded: map[string]bool{}, pendingEnvironment: options.StartingEnvironment}
+	m := Model{confirmDangerous: options.ConfirmDangerous, service: service, vim: options.VimMode, color: options.Color, expanded: map[string]bool{}, pendingEnvironment: options.StartingEnvironment}
 	if service == nil {
 		m.message = "No workspace is open"
 		return m
