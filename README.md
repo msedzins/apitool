@@ -65,6 +65,30 @@ apitool -e prod -c
 
 Use the collection picker to select a collection, the environment picker to switch environments, `/` to search requests, and `e` to edit the selected request. The command palette (`Ctrl+K`) contains History and the Git actions. Press `?` for the keyboard guide.
 
+## Example workspace and checks
+
+The [example workspace](examples/workspace/README.md) contains two collections and an intentionally invalid request so you can try collection discovery and diagnostics without creating definitions first. Start it with:
+
+```sh
+cd examples/workspace
+go run ../../cmd/apitool -e test
+```
+
+The end-to-end fixture test copies `testdata/workspace/` into a temporary Git repository. It includes invalid requests, including malformed YAML, to demonstrate validation errors alongside valid siblings. The test injects endpoint and credential values through the process environment, sends one request to an in-process HTTP server, and checks request editing, OAuth and request credential handling, response caching, history, redacted logs, and that `.apitool/` stays out of Git status. It requires no external API or credentials. Run it with:
+
+```sh
+go test ./internal/app -run TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall
+```
+
+Run all release-readiness checks with:
+
+```sh
+gofmt -w cmd internal
+go test ./...
+go vet ./...
+go build ./cmd/apitool
+```
+
 ## Editing and saving
 
 Request edits are held in the editor until you save. `Ctrl+S` writes the current request definition. Leaving a dirty request asks whether to save, discard, or cancel. The editor changes only the selected request YAML file; it does not change environment or collection files unless you edit those separately.
@@ -82,7 +106,3 @@ The palette exposes Git Status, Diff, Pull, Push, and Commit. These call the loc
 ## Outside the MVP
 
 The MVP runs one request at a time. It does not include collection synchronization, team accounts, shared cloud storage, request chaining, batch or parallel execution, retries, multipart or file bodies, mTLS, client certificates, or OAuth authorization-code login.
-
-## Fixture workspace and local verification
-
-`testdata/workspace/` is a small two-collection workspace used by the end-to-end app test. It includes an intentionally malformed request so the collection tree can demonstrate a visible validation failure while valid sibling requests remain usable. The test copies the fixture into a temporary directory, initializes a local Git repository, injects its endpoint and credentials through the process environment, and sends exactly one request to an in-process HTTP server. It checks response caching, history, redacted logs, and that `.apitool/` stays out of Git status. No external API or credential is required.

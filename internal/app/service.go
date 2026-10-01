@@ -222,6 +222,32 @@ func (s *Service) Workspace() (Workspace, error) {
 	return *s.opened, nil
 }
 
+// ReloadWorkspace rereads definitions and environments from disk while keeping
+// the active collection and its environment when they still exist.
+func (s *Service) ReloadWorkspace(ctx context.Context) (Workspace, error) {
+	if s.opened == nil {
+		return Workspace{}, errors.New("workspace is not open")
+	}
+	root, activeCollection := s.opened.Root, s.opened.ActiveCollection
+	activeEnvironment := ""
+	if view, ok := s.opened.Collections[activeCollection]; ok {
+		activeEnvironment = view.Environment
+	}
+	workspace, err := s.OpenWorkspace(ctx, root, OpenOptions{ConfirmDangerous: s.confirmDangerous})
+	if err != nil {
+		return Workspace{}, err
+	}
+	if view, ok := workspace.Collections[activeCollection]; ok {
+		workspace.ActiveCollection = activeCollection
+		if _, exists := view.Environments[activeEnvironment]; exists {
+			view.Environment = activeEnvironment
+		}
+		workspace.Collections[activeCollection] = view
+		s.opened = &workspace
+	}
+	return workspace, nil
+}
+
 func (s *Service) UIPreferences() (UIPreferences, error) {
 	if s.store == nil {
 		return UIPreferences{}, errors.New("workspace is not open")
@@ -245,6 +271,14 @@ func (s *Service) SearchHistory(_ context.Context, query string) ([]runtime.Hist
 		return nil, errors.New("workspace is not open")
 	}
 	return s.store.SearchHistory(query)
+}
+
+// CachedResponse returns the latest saved response for the selected definition identity.
+func (s *Service) CachedResponse(_ context.Context, selection Selection) (model.Response, error) {
+	if s.store == nil {
+		return model.Response{}, errors.New("workspace is not open")
+	}
+	return s.store.LatestResponse(runtime.Key{CollectionPath: selection.Collection, Environment: selection.Environment, RequestID: selection.RequestID})
 }
 
 func (s *Service) SelectEnvironment(_ context.Context, collectionPath, environment string) (CollectionView, error) {
@@ -284,6 +318,12 @@ func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
 	view, err := s.collection(selection.Collection)
 	if err != nil {
 		return executionResult(err)
+	}
+	if diagnostics := collectionLoadDiagnostics(view); len(diagnostics) > 0 {
+		return SendResult{
+			Diagnostics:    diagnostics,
+			ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Collection definition is invalid"},
+		}
 	}
 	if selection.Environment == "" {
 		selection.Environment = view.Environment
@@ -425,9 +465,10 @@ func (s *Service) refreshTree(collectionPath string) error {
 	if err != nil {
 		return err
 	}
+	collectionDiagnostics := collectionLoadDiagnostics(view)
 	tree, diagnostics := collection.BuildTree(view.Root)
 	view.Tree = tree
-	view.Diagnostics = diagnostics
+	view.Diagnostics = append(collectionDiagnostics, diagnostics...)
 	s.opened.Collections[collectionPath] = view
 	return nil
 }
@@ -469,6 +510,15 @@ func hasErrors(diags []model.Diagnostic) bool {
 		}
 	}
 	return false
+}
+func collectionLoadDiagnostics(view CollectionView) []model.Diagnostic {
+	var diagnostics []model.Diagnostic
+	for _, diagnostic := range view.Diagnostics {
+		if diagnostic.Code == "collection_load" {
+			diagnostics = append(diagnostics, diagnostic)
+		}
+	}
+	return diagnostics
 }
 func storageDiagnostic(code, path, message string) model.Diagnostic {
 	return model.Diagnostic{Code: code, Path: path, Message: message, Severity: model.SeverityWarning}
@@ -541,6 +591,9 @@ func (s *Service) AuthToken(ctx context.Context, selection Selection) (*model.Au
 	view, err := s.collection(selection.Collection)
 	if err != nil {
 		return nil, auth.Token{}, executionResult(err).ExecutionError
+	}
+	if len(collectionLoadDiagnostics(view)) > 0 {
+		return nil, auth.Token{}, &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Collection definition is invalid"}
 	}
 	if selection.Environment == "" {
 		selection.Environment = view.Environment

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"apitool/internal/app"
 	"apitool/internal/runtime"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -126,7 +125,7 @@ func (m *Model) reopenHistoryEntry(entry runtime.HistoryEntry) {
 	}
 	m.mode, m.focus, m.message = browseMode, collectionPane, ""
 	m.pendingEnvironment = ""
-	m.result = app.SendResult{}
+	m.clearResult()
 	m.gitAction, m.gitOutput = "", ""
 	rows := m.visibleRows()
 	for index, row := range rows {
@@ -139,6 +138,7 @@ func (m *Model) reopenHistoryEntry(entry runtime.HistoryEntry) {
 				m.openSelected()
 			} else {
 				m.focus = requestPane
+				m.loadCachedResponse()
 			}
 			m.savePreferences()
 			return

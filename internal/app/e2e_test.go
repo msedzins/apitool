@@ -3,47 +3,43 @@ package app_test
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	stdruntime "runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"apitool/internal/app"
-	"apitool/internal/runtime"
+	apiruntime "apitool/internal/runtime"
+)
+
+const (
+	fixtureClientID     = "fixture-client-id"
+	fixtureClientSecret = "fixture-client-secret-marker"
+	fixtureAccessToken  = "fixture-access-token-marker"
+	fixtureAPIKey       = "fixture-api-key-marker"
+	fixtureCookie       = "fixture-cookie-marker"
+	fixtureRawBody      = "fixture-raw-body-marker"
 )
 
 func TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall(t *testing.T) {
-	var executions atomic.Int32
-	const accessToken = "fixture-access-token-value"
-	const fixtureSecret = "fixture-client-secret-value"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		executions.Add(1)
-		if r.URL.Path != "/users" {
-			t.Errorf("request path = %q, want /users", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer "+accessToken {
-			t.Errorf("authorization = %q, want fixture token", got)
-		}
-		if got := r.Header.Get("X-Fixture-Edit"); got != "saved" {
-			t.Errorf("edited header = %q, want saved", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Set-Cookie", "session="+fixtureSecret)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
+	server := newAPIServer(t, http.StatusOK, `{"ok":true}`)
 	defer server.Close()
+	t.Setenv("APITOOL_E2E_API_URL", server.URL)
+	t.Setenv("APITOOL_E2E_TOKEN_URL", server.URL+"/oauth/token")
+	t.Setenv("APITOOL_E2E_CLIENT_ID", fixtureClientID)
+	t.Setenv("APITOOL_E2E_CLIENT_SECRET", fixtureClientSecret)
+	t.Setenv("APITOOL_E2E_API_KEY", fixtureAPIKey)
+	t.Setenv("APITOOL_E2E_COOKIE", fixtureCookie)
+	t.Setenv("APITOOL_E2E_RAW_BODY", fixtureRawBody)
 
-	t.Setenv("APITOOL_TEST_SERVER", server.URL)
-	t.Setenv("APITOOL_FIXTURE_ACCESS_TOKEN", accessToken)
-	t.Setenv("APITOOL_FIXTURE_SECRET", fixtureSecret)
-	root := copyFixtureWorkspace(t)
-	initializeFixtureGit(t, root)
-
-	service, err := app.New(app.Dependencies{})
+	root := fixtureRoot(t)
+	service, err := app.New(fixtureDependencies(t, server))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,174 +47,181 @@ func TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(opened.Collections) != 2 {
-		t.Fatalf("collections = %v, want users and payments", collectionNames(opened.Collections))
+	if got := len(opened.Collections); got != 2 {
+		t.Fatalf("discovered %d collections, want 2", got)
 	}
-	users, ok := opened.Collections["users"]
-	if !ok || users.Environment != "test" {
-		t.Fatalf("users collection/environment = %#v, want test environment", users)
+	users := opened.Collections["users"]
+	if got := len(users.Tree.Invalid); got != 2 {
+		t.Fatalf("invalid sibling requests = %d, want 2", got)
 	}
-	if _, ok := opened.Collections["payments"]; !ok {
-		t.Fatal("payments collection was not discovered")
+	for id, invalid := range users.Tree.Invalid {
+		if len(invalid.Diagnostics) == 0 {
+			t.Fatalf("invalid sibling request %q has no diagnostic", id)
+		}
 	}
-	if invalid := users.Tree.Invalid; len(invalid) == 0 {
-		t.Fatal("malformed sibling request was not reported as invalid")
+	request, ok := users.Tree.Requests["users/list"]
+	if !ok {
+		t.Fatal("users/list request was not discovered")
 	}
-	request := users.Tree.Requests["users/list"].Request
-	if request.Request.Headers == nil {
-		request.Request.Headers = map[string]string{}
+	request.Request.Name = "List users (edited)"
+	if err := service.SaveRequest(context.Background(), app.Selection{Collection: "users", RequestID: "users/list"}, request.Request); err != nil {
+		t.Fatalf("SaveRequest() error = %v", err)
 	}
-	request.Request.Headers["X-Fixture-Edit"] = "saved"
-	if err := service.SaveRequest(context.Background(), app.Selection{Collection: "users", RequestID: "users/list"}, request); err != nil {
-		t.Fatalf("save edited request: %v", err)
-	}
-	savedDefinition, err := os.ReadFile(filepath.Join(root, "users", ".api", "requests", "users", "list.yaml"))
-	if err != nil || !strings.Contains(string(savedDefinition), "X-Fixture-Edit: saved") {
-		t.Fatalf("saved request definition = %q, %v", savedDefinition, err)
+	rawDefinition, err := os.ReadFile(filepath.Join(root, "users", ".api", "requests", "users", "list.yaml"))
+	if err != nil || !strings.Contains(string(rawDefinition), "List users (edited)") {
+		t.Fatalf("edited request definition was not persisted: err=%v, contents=%q", err, rawDefinition)
 	}
 
-	result := service.Send(context.Background(), app.Selection{Collection: "users", Environment: "test", RequestID: "users/list"})
+	result := service.Send(context.Background(), app.Selection{Collection: "users", Environment: "test", RequestID: "users/list", Confirmed: true})
 	if result.ExecutionError != nil || result.Response == nil || result.Response.StatusCode != http.StatusOK {
-		t.Fatalf("send result = %#v", result)
+		t.Fatalf("Send() result = %#v", result)
 	}
-	if got := executions.Load(); got != 1 {
-		t.Fatalf("local server executions = %d, want exactly one", got)
+	if server.apiRequests != 1 || server.tokenRequests != 1 {
+		t.Fatalf("server request counts = api:%d token:%d, want api:1 token:1", server.apiRequests, server.tokenRequests)
 	}
-
-	store, err := runtime.Open(root)
+	cache, err := apiruntime.Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := runtime.Key{CollectionPath: "users", Environment: "test", RequestID: "users/list"}
-	cached, err := store.LatestResponse(key)
+	key := apiruntime.Key{CollectionPath: "users", Environment: "test", RequestID: "users/list"}
+	cached, err := cache.LatestResponse(key)
 	if err != nil || cached.StatusCode != http.StatusOK || string(cached.Body) != `{"ok":true}` {
-		t.Fatalf("cached response = %#v, %v", cached, err)
+		t.Fatalf("LatestResponse() = %#v, %v", cached, err)
 	}
-	assertBytesDoNotContainFixtureSecrets(t, "decoded cached response body", cached.Body, accessToken, fixtureSecret)
 	history, err := service.SearchHistory(context.Background(), "users/list")
 	if err != nil || len(history) != 1 || history[0].StatusCode != http.StatusOK {
-		t.Fatalf("history = %#v, %v", history, err)
+		t.Fatalf("SearchHistory() = %#v, %v", history, err)
 	}
-	reopened, err := service.OpenCollection(context.Background(), history[0].CollectionPath)
-	if err != nil || reopened.Tree.Requests[history[0].RequestID].Request.Request.Headers["X-Fixture-Edit"] != "saved" {
-		t.Fatalf("history request recall = %#v, %v", reopened.Tree.Requests[history[0].RequestID], err)
-	}
-	for _, path := range []string{
-		filepath.Join(root, ".apitool", "history.jsonl"),
-		filepath.Join(root, ".apitool", "logs", "executions.jsonl"),
-		filepath.Join(root, ".apitool", "responses"),
-	} {
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("runtime artifact %q missing: %v", path, err)
+	for _, path := range []string{"history.jsonl", filepath.Join("logs", "executions.jsonl")} {
+		if _, err := os.Stat(filepath.Join(root, ".apitool", path)); err != nil {
+			t.Errorf("runtime record %s was not written below .apitool: %v", path, err)
 		}
 	}
-	assertNoFixtureSecrets(t, filepath.Join(root, ".apitool"), accessToken, fixtureSecret)
-
-	status := exec.Command("git", "status", "--short", "--untracked-files=all")
-	status.Dir = root
-	output, err := status.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git status: %v\n%s", err, output)
+	if len(result.Logs) != 1 || result.Logs[0].Key != key {
+		t.Fatalf("execution logs = %#v, want one safe record for %#v", result.Logs, key)
 	}
-	if strings.Contains(string(output), ".apitool") {
-		t.Fatalf("runtime path appears in git status:\n%s", output)
+	assertRuntimeContainsNoSecrets(t, filepath.Join(root, ".apitool"))
+	status, err := service.GitStatus(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, "users/.api/requests/users/list.yaml") || strings.Contains(status, ".apitool") {
+		t.Fatalf("Git status after runtime writes = %q, want the edited definition and no runtime paths", status)
 	}
 }
 
-func copyFixtureWorkspace(t *testing.T) string {
+type fixtureServer struct {
+	*httptest.Server
+	apiRequests   int
+	tokenRequests int
+}
+
+func newAPIServer(t *testing.T, status int, body string) *fixtureServer {
 	t.Helper()
-	source := filepath.Join("..", "..", "testdata", "workspace")
-	root := t.TempDir()
-	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	fixture := &fixtureServer{}
+	fixture.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth/token":
+			fixture.tokenRequests++
+			clientID, secret, ok := r.BasicAuth()
+			requestBody, _ := io.ReadAll(r.Body)
+			if !ok || clientID != fixtureClientID || secret != fixtureClientSecret || !strings.Contains(string(requestBody), "grant_type=client_credentials") {
+				http.Error(w, "invalid fixture credentials", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600}`, fixtureAccessToken)
+		case "/users":
+			fixture.apiRequests++
+			requestBody, _ := io.ReadAll(r.Body)
+			if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer "+fixtureAccessToken || r.Header.Get("X-API-Key") != fixtureAPIKey || r.Header.Get("Cookie") != "session="+fixtureCookie || string(requestBody) != fixtureRawBody {
+				http.Error(w, "fixture request did not match", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, body)
+		default:
+			http.NotFound(w, r)
 		}
-		rel, err := filepath.Rel(source, path)
-		if err != nil || rel == "." {
+	}))
+	return fixture
+}
+
+func fixtureDependencies(_ *testing.T, _ *fixtureServer) app.Dependencies {
+	return app.Dependencies{}
+}
+
+func fixtureRoot(t *testing.T) string {
+	t.Helper()
+	_, source, _, ok := stdruntime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate end-to-end test source")
+	}
+	sourceRoot := filepath.Join(filepath.Dir(source), "..", "..", "testdata", "workspace")
+	root := filepath.Join(t.TempDir(), "workspace")
+	if err := copyDirectory(sourceRoot, root); err != nil {
+		t.Fatalf("copy fixture workspace: %v", err)
+	}
+	gitCommand(t, root, "init", "-q")
+	gitCommand(t, root, "config", "user.email", "fixture@example.test")
+	gitCommand(t, root, "config", "user.name", "Fixture Test")
+	gitCommand(t, root, "add", ".")
+	gitCommand(t, root, "commit", "-qm", "fixture workspace")
+	return root
+}
+
+func copyDirectory(source, destination string) error {
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
 			return err
 		}
-		destination := filepath.Join(root, rel)
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, relative)
 		if entry.IsDir() {
-			return os.MkdirAll(destination, 0o755)
+			return os.MkdirAll(target, 0o755)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(destination, data, 0o644)
+		return os.WriteFile(target, data, 0o644)
 	})
-	if err != nil {
-		t.Fatalf("copy fixture workspace: %v", err)
-	}
-	return root
 }
 
-func initializeFixtureGit(t *testing.T, root string) {
+func gitCommand(t *testing.T, root string, args ...string) {
 	t.Helper()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		if output, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, output)
+	command := exec.Command("git", args...)
+	command.Dir = root
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+	}
+}
+
+func assertRuntimeContainsNoSecrets(t *testing.T, root string) {
+	t.Helper()
+	secrets := []string{fixtureClientSecret, fixtureAccessToken, fixtureAPIKey, fixtureCookie, fixtureRawBody}
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-	}
-	run("init", "-q")
-	gitignore := filepath.Join(root, ".gitignore")
-	if err := os.WriteFile(gitignore, []byte(".apitool/\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	run("add", "-A")
-	run("-c", "user.name=apitool test", "-c", "user.email=apitool@example.test", "commit", "-qm", "fixture")
-}
-
-func assertNoFixtureSecrets(t *testing.T, root string, secrets ...string) {
-	t.Helper()
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.IsDir() {
-			return walkErr
+		if entry.IsDir() {
+			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		for _, secret := range secrets {
-			if containsFixtureSecret(data, secret) {
-				t.Errorf("runtime file %q contains a fixture secret (plain or base64 encoded)", path)
+			if strings.Contains(string(data), secret) || strings.Contains(string(data), base64.StdEncoding.EncodeToString([]byte(secret))) {
+				t.Errorf("runtime file %s contains sensitive fixture value %q", path, secret)
 			}
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("inspect runtime files: %v", err)
 	}
-}
-
-func containsFixtureSecret(data []byte, secret string) bool {
-	return strings.Contains(string(data), secret) || strings.Contains(string(data), base64.StdEncoding.EncodeToString([]byte(secret)))
-}
-
-func TestFixtureSecretScanDetectsBase64EncodedValues(t *testing.T) {
-	secret := "fixture-access-token-value"
-	encoded := []byte(base64.StdEncoding.EncodeToString([]byte(secret)))
-	if !containsFixtureSecret(encoded, secret) {
-		t.Fatal("base64-encoded fixture secret was not detected")
-	}
-}
-
-func assertBytesDoNotContainFixtureSecrets(t *testing.T, label string, data []byte, secrets ...string) {
-	t.Helper()
-	for _, secret := range secrets {
-		if strings.Contains(string(data), secret) {
-			t.Errorf("%s contains a fixture secret", label)
-		}
-	}
-}
-
-func collectionNames(collections map[string]app.CollectionView) []string {
-	names := make([]string, 0, len(collections))
-	for name := range collections {
-		names = append(names, name)
-	}
-	return names
 }

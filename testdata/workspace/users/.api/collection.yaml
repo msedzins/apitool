@@ -1,2 +1,7 @@
 name: Users API
-description: User directory requests
+auth:
+  type: oauth2
+  grant: client_credentials
+  token_url: "{{token_url}}"
+  client_id: ${APITOOL_E2E_CLIENT_ID}
+  client_secret: ${APITOOL_E2E_CLIENT_SECRET}

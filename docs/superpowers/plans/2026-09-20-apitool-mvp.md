@@ -12,7 +12,7 @@
 
 ## Task status
 
-Reviewed on 2026-10-01. Tasks 1–11 have delivered implementations; Tasks 12–13 remain planned.
+Reviewed on 2026-10-01. Tasks 1–12 have delivered implementations; Task 13 remains planned.
 
 - **Implemented:** delivered and reviewed, with no confirmed outstanding correction in this review.
 - **Needs corrections:** delivered, but the corrective checklist must pass before completion.
@@ -914,11 +914,11 @@ git commit -m "feat: complete history Git controls and documentation"
 
 **Files:**
 - Create: `internal/app/e2e_test.go`
+- Create: `testdata/workspace/.gitignore`
 - Create: `testdata/workspace/users/.api/collection.yaml`
 - Create: `testdata/workspace/users/.api/environments/test.yaml`
+- Create: `testdata/workspace/users/.api/requests/broken.yaml`
 - Create: `testdata/workspace/users/.api/requests/users/list.yaml`
-- Create: `testdata/workspace/users/.api/requests/invalid/malformed.yaml`
-- Create: `testdata/workspace/payments/.api/environments/test.yaml`
 - Modify: `README.md`
 
 **Interfaces:**

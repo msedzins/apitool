@@ -524,6 +524,51 @@ func TestSendReportsRuntimePersistenceFailures(t *testing.T) {
 	}
 }
 
+func TestSendAndAuthTokenRejectInvalidCollectionAfterReload(t *testing.T) {
+	root := requestWorkspace(t, "https://api.example.test")
+	provider := &recordingTokenProvider{}
+	executed := false
+	service, err := app.New(app.Dependencies{
+		TokenProvider: provider,
+		Execute: func(context.Context, model.EffectiveRequest, auth.TokenProvider) (model.Response, *model.ExecutionError) {
+			executed = true
+			return model.Response{StatusCode: http.StatusOK}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.OpenWorkspace(context.Background(), root, app.OpenOptions{Collection: "payments", Environment: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "payments", ".api", "collection.yaml"), []byte("name: [invalid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ReloadWorkspace(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	selection := app.Selection{Collection: "payments", Environment: "test", RequestID: "check"}
+	workspace, err := service.Workspace()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := workspace.Collections["payments"].Tree.Requests["check"].Request
+	if err := service.SaveRequest(context.Background(), selection, request); err != nil {
+		t.Fatalf("SaveRequest() error = %v", err)
+	}
+	result := service.Send(context.Background(), selection)
+	if result.Response != nil || result.ExecutionError == nil || executed {
+		t.Fatalf("Send() on invalid collection = %#v, executed=%v", result, executed)
+	}
+	if !hasAppDiagnostic(result.Diagnostics, "collection_load") {
+		t.Fatalf("Send() diagnostics = %#v, want collection_load", result.Diagnostics)
+	}
+	_, _, authError := service.AuthToken(context.Background(), selection)
+	if authError == nil || provider.calls != 0 {
+		t.Fatalf("AuthToken() error=%#v provider calls=%d, want rejected without token acquisition", authError, provider.calls)
+	}
+}
+
 type recordingTokenProvider struct{ calls int }
 
 func (p *recordingTokenProvider) Token(context.Context, model.Auth) (auth.Token, error) {

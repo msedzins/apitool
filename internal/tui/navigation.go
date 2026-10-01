@@ -38,8 +38,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			e := m.effectiveSelection(selection)
 			m.sendPrompt = &sendConfirmation{selection: selection, method: e.Method, url: safeRequestURL(e)}
 		} else {
-			m.result = x.result
-			m.responseOffset = 0
+			current, ok := m.executionSelection()
+			if ok && sameSelection(m.sendSelection, x.selection) && sameSelection(current, x.selection) {
+				m.result = x.result
+				m.resultSelection = x.selection
+				m.resultCached = false
+				m.responseOffset = 0
+			}
 		}
 		return m, nil
 	case authFinishedMsg:
@@ -54,6 +59,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitAction, m.gitOutput = x.action, x.output
 		if x.err != nil {
 			m.gitOutput = strings.TrimSpace(strings.TrimSpace(x.output) + "\n" + x.err.Error())
+		} else if x.action == "Pull" {
+			if err := m.reloadAfterPull(); err != nil {
+				m.gitOutput = strings.TrimSpace(m.gitOutput + "\nCould not reload workspace: " + err.Error())
+			}
 		}
 		m.responseOffset = 0
 		m.message = "Git: " + x.action
@@ -72,6 +81,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if x.Type == tea.KeyCtrlC {
 			return m, tea.Quit
+		}
+		if m.gitBusy {
+			return m, nil
 		}
 		if m.saving {
 			return m, nil
@@ -115,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.handleKey(x)
 	case tea.MouseMsg:
-		if !m.help && m.prompt == nil && !m.saving {
+		if !m.gitBusy && !m.help && m.prompt == nil && !m.saving {
 			if m.handleResponseSplitMouse(x) {
 				return m, nil
 			}
@@ -281,6 +293,10 @@ func (m *Model) handleSearch(k tea.KeyMsg) {
 func (m *Model) handleCollectionPicker(k tea.KeyMsg) {
 	switch k.Type {
 	case tea.KeyEsc:
+		if diagnostic := collectionLoadDiagnostic(m.view); diagnostic != nil {
+			m.message = diagnostic.Path + ": " + diagnostic.Message
+			return
+		}
 		m.mode = browseMode
 	case tea.KeyEnter:
 		if len(m.collections) > 0 {
@@ -336,6 +352,8 @@ func (m *Model) openSelected() {
 	} else if row.kind == requestRow {
 		m.focus = requestPane
 		m.message = "Request: " + row.id
+		m.clearResult()
+		m.loadCachedResponse()
 	} else if row.kind == invalidRow {
 		if invalid, ok := m.view.Tree.Invalid[row.id]; ok {
 			details := make([]string, 0, len(invalid.Diagnostics))
@@ -522,6 +540,8 @@ func (m *Model) openSearchSelection() {
 	m.mode = browseMode
 	m.treeIndex = indexRow(m.visibleRows(), id)
 	m.focus, m.message = requestPane, "Request: "+id
+	m.clearResult()
+	m.loadCachedResponse()
 }
 func (m Model) environmentNames() []string {
 	r := make([]string, 0, len(m.view.Environments))
@@ -683,6 +703,8 @@ func (m *Model) beginEdit(id string) {
 	m.draftUndo, m.draftRedo = nil, nil
 	m.jsonTextPresentation, m.jsonCursor = false, 0
 	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor, m.jsonScalarDraftLoaded = "", false, 0, false
+	m.clearResult()
+	m.loadCachedResponse()
 	if ok {
 		m.message = ""
 	}

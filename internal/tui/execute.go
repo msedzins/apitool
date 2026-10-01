@@ -46,6 +46,13 @@ func (m Model) executionSelection() (app.Selection, bool) {
 func sameSelection(a, b app.Selection) bool {
 	return a.Collection == b.Collection && a.Environment == b.Environment && a.RequestID == b.RequestID
 }
+func (m Model) hasCurrentResult() bool {
+	if m.resultSelection.RequestID == "" {
+		return false
+	}
+	selection, ok := m.executionSelection()
+	return ok && sameSelection(selection, m.resultSelection)
+}
 func (m Model) effectiveSelection(selection app.Selection) model.EffectiveRequest {
 	node := m.view.Tree.Requests[selection.RequestID]
 	groups := make([]model.Group, len(node.Groups))
@@ -77,8 +84,8 @@ func (m *Model) beginSend() tea.Cmd {
 func (m *Model) sendCommand(selection app.Selection) tea.Cmd {
 	m.sending = true
 	m.sendSelection = selection
-	m.result = app.SendResult{}
-	m.responseOffset = 0
+	m.clearResult()
+	m.resultSelection = selection
 	m.responseTab = 0
 	m.message = ""
 	service := m.service
@@ -86,6 +93,44 @@ func (m *Model) sendCommand(selection app.Selection) tea.Cmd {
 		return sendFinishedMsg{selection: selection, result: service.Send(context.Background(), selection)}
 	}
 }
+
+func (m *Model) clearResult() {
+	m.result = app.SendResult{}
+	m.resultSelection = app.Selection{}
+	m.resultCached = false
+	m.responseOffset = 0
+	m.responseTab = 0
+	m.rawResponse = false
+}
+
+func (m *Model) loadCachedResponse() {
+	selection, ok := m.executionSelection()
+	if !ok || selection.Environment == "" {
+		return
+	}
+	response, err := m.service.CachedResponse(context.Background(), selection)
+	if err == runtime.ErrNotFound {
+		return
+	}
+	if err != nil {
+		m.result = app.SendResult{Diagnostics: []model.Diagnostic{{
+			Code:     "runtime_cache_read",
+			Path:     ".apitool/responses",
+			Message:  "could not read cached response",
+			Severity: model.SeverityWarning,
+		}}}
+		m.resultSelection = selection
+		m.resultCached = false
+		return
+	}
+	m.result = app.SendResult{Response: &response}
+	m.resultSelection = selection
+	m.resultCached = true
+	m.responseOffset = 0
+	m.responseTab = 0
+	m.rawResponse = false
+}
+
 func dangerousMethod(method string) bool {
 	switch strings.ToUpper(method) {
 	case "POST", "PUT", "PATCH", "DELETE":

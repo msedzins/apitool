@@ -30,7 +30,7 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [UI-001 — Select a discovered collection](#ui-001) | UI | TUI | R-001 | T-002, T-008 | implemented |
 | [UI-002 — Keep invalid request definitions visible](#ui-002) | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
 | [UI-003 — Render nested request groups](#ui-003) | UI | TUI | R-004 | T-002, T-008 | implemented |
-| [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008, T-010 | implemented |
+| [UI-004 — Navigate without color](#ui-004) | UI | TUI | R-011 | T-008, T-010 | planned |
 | [UI-015 — Open keyboard help from any TUI mode](#ui-015) | UI | TUI | R-011 | T-008 | implemented |
 | [UI-016 — Restore the prior view after closing help](#ui-016) | UI | TUI | R-011 | T-008 | implemented |
 | [UI-017 — Show the active pane during keyboard navigation](#ui-017) | UI | TUI | R-011 | T-008 | implemented |
@@ -45,24 +45,24 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [API-001 — Send resolved environment values](#api-001) | API | API/Protocol (HTTP) | R-006 | T-003, T-004, T-006 | planned |
 | [API-002 — Diagnose a missing variable safely](#api-002) | API | TUI | R-006 | T-003, T-006 | planned |
 | [API-003 — Use nearest inherited authentication](#api-003) | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |
-| [API-004 — Disable inherited authentication](#api-004) | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | implemented |
+| [API-004 — Disable inherited authentication](#api-004) | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |
 | [API-005 — Request OAuth scopes](#api-005) | API | API/Protocol (OAuth over HTTP) | R-008 | T-004 | implemented |
 | [API-006 — Reuse and refresh OAuth tokens](#api-006) | API | API/Protocol (OAuth over HTTP) | R-008 | T-004 | implemented |
 | [API-007 — Report OAuth failures safely](#api-007) | API | TUI | R-008 | T-004, T-005 | planned |
-| [UI-005 — Resolve dirty navigation](#ui-005) | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
-| [UI-006 — Limit undo and redo to one request](#ui-006) | UI | TUI | R-012 | T-009 | implemented |
-| [UI-007 — Switch between JSON and raw body modes](#ui-007) | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
+| [UI-005 — Resolve dirty navigation](#ui-005) | UI | TUI, Filesystem/Git | R-012 | T-009 | planned |
+| [UI-006 — Limit undo and redo to one request](#ui-006) | UI | TUI | R-012 | T-009 | planned |
+| [UI-007 — Switch between JSON and raw body modes](#ui-007) | UI | TUI, Filesystem/Git | R-012 | T-009 | planned |
 | [UI-008 — Duplicate or delete definitions safely](#ui-008) | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
 | [UI-009 — Confirm a dangerous send](#ui-009) | UI | TUI, API/Protocol (HTTP) | R-013 | T-006, T-010 | planned |
-| [UI-010 — Render completed HTTP error responses](#ui-010) | UI | TUI | R-009 | T-004, T-006, T-010 | implemented |
+| [UI-010 — Render completed HTTP error responses](#ui-010) | UI | TUI | R-009 | T-004, T-006, T-010 | planned |
 | [UI-011 — Render execution diagnostics](#ui-011) | UI | TUI | R-009 | T-004, T-006, T-010 | planned |
-| [UI-012 — Reveal a token only for the session](#ui-012) | UI | TUI | R-013 | T-010 | implemented |
+| [UI-012 — Reveal a token only for the session](#ui-012) | UI | TUI | R-013 | T-010 | planned |
 | [DATA-001 — Isolate cached responses by environment](#data-001) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
-| [DATA-002 — Redact runtime records](#data-002) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | implemented |
+| [DATA-002 — Redact runtime records](#data-002) | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
 | [DATA-003 — Keep runtime state out of Git](#data-003) | DATA | Filesystem/Git | R-010 | T-005, T-012 | implemented |
-| [UI-013 — Reopen a request from history](#ui-013) | UI | TUI | R-014 | T-005, T-011 | planned |
+| [UI-013 — Reopen a request from history](#ui-013) | UI | TUI | R-014 | T-005, T-011 | implemented |
 | [UI-014 — Run safe Git actions](#ui-014) | UI | TUI, Filesystem/Git | R-014 | T-007, T-011 | planned |
-| [WF-001 — Complete the local multi-collection workflow](#wf-001) | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | planned |
+| [WF-001 — Complete the local multi-collection workflow](#wf-001) | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | implemented |
 | [OPS-001 — Enforce the CI quality gate](#ops-001) | OPS | CI | R-016 | T-013 | planned |
 
 | [CFG-007 — Retain a draft when save-and-continue fails](#cfg-007) | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
@@ -176,7 +176,7 @@ The underlying stable request ID is the collection-relative request path.
 **Observable surface:** TUI<br>
 **Requirements:** R-011<br>
 **Tasks:** T-008, T-010<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -421,7 +421,7 @@ Priority-1 screen proposals: [08](../designs/priority-1/gallery.md#08-auth-overr
 **Observable surface:** TUI, Filesystem/Git<br>
 **Requirements:** R-005<br>
 **Tasks:** T-005, T-006, T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -471,7 +471,7 @@ The override is not persisted to Git.
 **Observable surface:** CLI, TUI<br>
 **Requirements:** R-005<br>
 **Tasks:** T-006, T-008<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -550,7 +550,7 @@ Priority-1 screen proposals: [15](../designs/priority-1/gallery.md#15-validation
 **Observable surface:** API/Protocol (HTTP)<br>
 **Requirements:** R-007<br>
 **Tasks:** T-003, T-004, T-006<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -684,7 +684,7 @@ Priority-1 screen proposals: [17](../designs/priority-1/gallery.md#17-log).
 **Observable surface:** TUI, Filesystem/Git<br>
 **Requirements:** R-012<br>
 **Tasks:** T-009<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -711,7 +711,7 @@ Priority-1 screen proposals: [19](../designs/priority-1/gallery.md#19-dirty-navi
 **Observable surface:** TUI<br>
 **Requirements:** R-012<br>
 **Tasks:** T-009<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -738,7 +738,7 @@ Priority-1 screen proposals: [01](../designs/priority-1/gallery.md#01-params).
 **Observable surface:** TUI, Filesystem/Git<br>
 **Requirements:** R-012<br>
 **Tasks:** T-009<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -817,7 +817,7 @@ Priority-1 screen proposals: [21](../designs/priority-1/gallery.md#21-confirm-se
 **Observable surface:** TUI<br>
 **Requirements:** R-009<br>
 **Tasks:** T-004, T-006, T-010<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -871,7 +871,7 @@ Priority-1 screen proposals: [15](../designs/priority-1/gallery.md#15-validation
 **Observable surface:** TUI<br>
 **Requirements:** R-013<br>
 **Tasks:** T-010<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -928,7 +928,7 @@ Priority-1 screen proposals: [13](../designs/priority-1/gallery.md#13-cached).
 **Observable surface:** TUI, Filesystem/Git<br>
 **Requirements:** R-010<br>
 **Tasks:** T-005, T-012<br>
-**Status:** implemented
+**Status:** planned
 
 ### Given
 
@@ -982,7 +982,7 @@ Cached runtime records use owner-only permissions where supported.
 **Observable surface:** TUI<br>
 **Requirements:** R-014<br>
 **Tasks:** T-005, T-011<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -1034,7 +1034,7 @@ The actions run at the workspace root and require no provider-specific remote.
 **Observable surface:** TUI, API/Protocol (HTTP), Filesystem/Git<br>
 **Requirements:** R-015<br>
 **Tasks:** T-012<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -1155,7 +1155,7 @@ Priority-1 screen proposal: [11](../designs/priority-1/gallery.md#11-response).
 | UI-001 | UI | TUI | R-001 | T-002, T-008 | implemented |
 | UI-002 | UI | TUI | R-002 | T-001, T-002, T-008 | implemented |
 | UI-003 | UI | TUI | R-004 | T-002, T-008 | implemented |
-| UI-004 | UI | TUI | R-011 | T-008, T-010 | implemented |
+| UI-004 | UI | TUI | R-011 | T-008, T-010 | planned |
 | UI-015 | UI | TUI | R-011 | T-008 | implemented |
 | UI-016 | UI | TUI | R-011 | T-008 | implemented |
 | UI-017 | UI | TUI | R-011 | T-008 | implemented |
@@ -1170,24 +1170,24 @@ Priority-1 screen proposal: [11](../designs/priority-1/gallery.md#11-response).
 | API-001 | API | API/Protocol (HTTP) | R-006 | T-003, T-004, T-006 | planned |
 | API-002 | API | TUI | R-006 | T-003, T-006 | planned |
 | API-003 | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |
-| API-004 | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | implemented |
+| API-004 | API | API/Protocol (HTTP) | R-007 | T-003, T-004, T-006 | planned |
 | API-005 | API | API/Protocol (OAuth over HTTP) | R-008 | T-004 | implemented |
 | API-006 | API | API/Protocol (OAuth over HTTP) | R-008 | T-004 | implemented |
 | API-007 | API | TUI | R-008 | T-004, T-005 | planned |
-| UI-005 | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
-| UI-006 | UI | TUI | R-012 | T-009 | implemented |
-| UI-007 | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
+| UI-005 | UI | TUI, Filesystem/Git | R-012 | T-009 | planned |
+| UI-006 | UI | TUI | R-012 | T-009 | planned |
+| UI-007 | UI | TUI, Filesystem/Git | R-012 | T-009 | planned |
 | UI-008 | UI | TUI, Filesystem/Git | R-012 | T-009 | implemented |
 | UI-009 | UI | TUI, API/Protocol (HTTP) | R-013 | T-006, T-010 | planned |
-| UI-010 | UI | TUI | R-009 | T-004, T-006, T-010 | implemented |
+| UI-010 | UI | TUI | R-009 | T-004, T-006, T-010 | planned |
 | UI-011 | UI | TUI | R-009 | T-004, T-006, T-010 | planned |
-| UI-012 | UI | TUI | R-013 | T-010 | implemented |
+| UI-012 | UI | TUI | R-013 | T-010 | planned |
 | DATA-001 | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
 | DATA-002 | DATA | TUI, Filesystem/Git | R-010 | T-005, T-012 | planned |
-| DATA-003 | DATA | Filesystem/Git | R-010 | T-005, T-012 | planned |
-| UI-013 | UI | TUI | R-014 | T-005, T-011 | planned |
+| DATA-003 | DATA | Filesystem/Git | R-010 | T-005, T-012 | implemented |
+| UI-013 | UI | TUI | R-014 | T-005, T-011 | implemented |
 | UI-014 | UI | TUI, Filesystem/Git | R-014 | T-007, T-011 | planned |
-| WF-001 | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | planned |
+| WF-001 | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | implemented |
 | OPS-001 | OPS | CI | R-016 | T-013 | planned |
 
 | CFG-007 | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
