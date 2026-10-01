@@ -63,7 +63,7 @@ implementation_plan: docs/superpowers/plans/2026-09-20-apitool-mvp.md
 | [UI-013 — Reopen a request from history](#ui-013) | UI | TUI | R-014 | T-005, T-011 | implemented |
 | [UI-014 — Run safe Git actions](#ui-014) | UI | TUI, Filesystem/Git | R-014 | T-007, T-011 | planned |
 | [WF-001 — Complete the local multi-collection workflow](#wf-001) | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | implemented |
-| [OPS-001 — Enforce the CI quality gate](#ops-001) | OPS | CI | R-016 | T-013 | planned |
+| [OPS-001 — Enforce the CI quality gate](#ops-001) | OPS | CI | R-016 | T-013 | implemented |
 
 | [CFG-007 — Retain a draft when save-and-continue fails](#cfg-007) | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
 | [UI-020 — Display cancellation as an execution diagnostic](#ui-020) | UI | TUI, API/Protocol (HTTP) | R-009 | T-004, T-006, T-010 | planned |
@@ -1059,7 +1059,7 @@ The workflow makes no external network call and must not expose fixture credenti
 **Observable surface:** CI<br>
 **Requirements:** R-016<br>
 **Tasks:** T-013<br>
-**Status:** planned
+**Status:** implemented
 
 ### Given
 
@@ -1188,7 +1188,7 @@ Priority-1 screen proposal: [11](../designs/priority-1/gallery.md#11-response).
 | UI-013 | UI | TUI | R-014 | T-005, T-011 | implemented |
 | UI-014 | UI | TUI, Filesystem/Git | R-014 | T-007, T-011 | planned |
 | WF-001 | WF | TUI, API/Protocol (HTTP), Filesystem/Git | R-015 | T-012 | implemented |
-| OPS-001 | OPS | CI | R-016 | T-013 | planned |
+| OPS-001 | OPS | CI | R-016 | T-013 | implemented |
 
 | CFG-007 | CFG | TUI, Filesystem/Git | R-003, R-012 | T-001, T-006, T-009 | planned |
 | UI-020 | UI | TUI, API/Protocol (HTTP) | R-009 | T-004, T-006, T-010 | planned |
