@@ -24,6 +24,13 @@ func (m Model) responseLines() []string {
 	if m.sending {
 		return []string{"Sending… (you can still navigate panes)"}
 	}
+	if m.gitAction != "" {
+		lines := []string{"Git: " + m.gitAction}
+		if strings.TrimSpace(m.gitOutput) == "" {
+			return append(lines, "No output.")
+		}
+		return append(lines, strings.Split(strings.TrimSuffix(m.gitOutput, "\n"), "\n")...)
+	}
 	if m.responseTab == 2 {
 		return m.logLines()
 	}

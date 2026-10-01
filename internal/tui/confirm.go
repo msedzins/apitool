@@ -92,7 +92,12 @@ func (m Model) confirmationView() string {
 		lines = append(lines, "Press y or Enter to confirm; Esc cancels.")
 		return strings.Join(lines, "\n") + "\n"
 	case commandPalette:
-		return "Request actions\n[d] Duplicate request\n[x] Delete request\n[g] Delete group\n[Esc] Cancel\n"
+		lines := []string{"Command palette", "[h] History", "[s] Git: Status", "[f] Git: Diff", "[p] Git: Pull", "[u] Git: Push", "[c] Git: Commit"}
+		if m.editor != nil {
+			lines = append(lines, "[d] Duplicate request", "[x] Delete request", "[g] Delete group")
+		}
+		lines = append(lines, "[Esc] Cancel")
+		return strings.Join(lines, "\n") + "\n"
 	default:
 		return ""
 	}
@@ -102,7 +107,7 @@ func (m *Model) handleConfirmation(key tea.KeyMsg) tea.Cmd {
 	if m.prompt == nil {
 		return nil
 	}
-	if key.Type == tea.KeyEsc || (key.Type == tea.KeyRunes && string(key.Runes) == "c") {
+	if key.Type == tea.KeyEsc || (m.prompt.kind != commandPalette && key.Type == tea.KeyRunes && string(key.Runes) == "c") {
 		m.prompt = nil
 		return nil
 	}
@@ -143,6 +148,19 @@ func (m *Model) handleConfirmation(key tea.KeyMsg) tea.Cmd {
 	case commandPalette:
 		m.prompt = nil
 		switch strings.ToLower(value) {
+		case "h":
+			m.openHistory()
+		case "s":
+			return m.startGitAction("Status", "")
+		case "f":
+			return m.startGitAction("Diff", "")
+		case "p":
+			return m.startGitAction("Pull", "")
+		case "u":
+			return m.startGitAction("Push", "")
+		case "c":
+			m.paletteReturnMode = m.mode
+			m.mode, m.gitCommitMessage, m.message = gitCommitMode, "", ""
 		case "d":
 			m.beginDuplicate()
 		case "x":

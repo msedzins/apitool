@@ -61,8 +61,9 @@ type Workspace struct {
 	ActiveCollection string
 }
 type UIPreferences struct {
-	ActiveCollection string
-	ExplorerWidth    int
+	ActiveCollection            string
+	ExplorerWidth               int
+	RequestResponseSplitPercent int
 }
 type CollectionView struct {
 	Path         string
@@ -229,13 +230,21 @@ func (s *Service) UIPreferences() (UIPreferences, error) {
 	if err != nil {
 		return UIPreferences{}, err
 	}
-	return UIPreferences{ActiveCollection: state.ActiveCollection, ExplorerWidth: state.ExplorerWidth}, nil
+	return UIPreferences{ActiveCollection: state.ActiveCollection, ExplorerWidth: state.ExplorerWidth, RequestResponseSplitPercent: state.RequestResponseSplitPercent}, nil
 }
-func (s *Service) SaveUIPreferences(collection string, explorerWidth int) error {
+func (s *Service) SaveUIPreferences(collection string, explorerWidth, requestResponseSplitPercent int) error {
 	if s.store == nil {
 		return errors.New("workspace is not open")
 	}
-	return s.store.SaveState(runtime.State{ActiveCollection: collection, ExplorerWidth: explorerWidth})
+	return s.store.SaveState(runtime.State{ActiveCollection: collection, ExplorerWidth: explorerWidth, RequestResponseSplitPercent: requestResponseSplitPercent})
+}
+
+// SearchHistory returns safe, local execution metadata for the TUI history screen.
+func (s *Service) SearchHistory(_ context.Context, query string) ([]runtime.HistoryEntry, error) {
+	if s.store == nil {
+		return nil, errors.New("workspace is not open")
+	}
+	return s.store.SearchHistory(query)
 }
 
 func (s *Service) SelectEnvironment(_ context.Context, collectionPath, environment string) (CollectionView, error) {

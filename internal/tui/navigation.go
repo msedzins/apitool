@@ -47,6 +47,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.authConfig, m.authToken, m.authFailure = x.config, x.token, x.failure
 		}
 		return m, nil
+	case gitActionFinishedMsg:
+		m.gitBusy = false
+		m.mode = m.paletteReturnMode
+		m.gitAction, m.gitOutput = x.action, x.output
+		if x.err != nil {
+			m.gitOutput = strings.TrimSpace(strings.TrimSpace(x.output) + "\n" + x.err.Error())
+		}
+		m.responseOffset = 0
+		m.message = "Git: " + x.action
+		return m, nil
 	case requestSavedMsg:
 		return m, m.handleRequestSaved(x)
 	case deleteFinishedMsg:
@@ -74,6 +84,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prompt != nil {
 			return m, m.handleConfirmation(x)
 		}
+		if m.mode == historyMode {
+			m.handleHistoryKey(x)
+			return m, nil
+		}
+		if m.mode == gitCommitMode {
+			return m, m.handleGitCommitKey(x)
+		}
+		if x.Alt && (x.Type == tea.KeyUp || x.Type == tea.KeyDown) {
+			delta := -1
+			if x.Type == tea.KeyDown {
+				delta = 1
+			}
+			m.resizeResponseSplit(delta)
+			return m, nil
+		}
 		if handled, cmd := m.executionKey(x); handled {
 			return m, cmd
 		}
@@ -90,6 +115,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleKey(x)
 	case tea.MouseMsg:
 		if !m.help && m.prompt == nil && !m.saving {
+			if m.handleResponseSplitMouse(x) {
+				return m, nil
+			}
 			if handled, cmd := m.executionMouse(x); handled {
 				return m, cmd
 			}
@@ -118,6 +146,8 @@ func (m *Model) handleKey(k tea.KeyMsg) {
 	case tea.KeyCtrlP:
 		m.mode = collectionPickerMode
 		m.collectionIndex = indexOf(m.collections, m.collection)
+	case tea.KeyCtrlK:
+		m.prompt = &confirmation{kind: commandPalette}
 	case tea.KeyCtrlE:
 		if m.collection != "" {
 			m.mode = environmentPickerMode
@@ -152,9 +182,53 @@ func (m *Model) resizeExplorer(delta int) {
 	m.explorer = clampExplorer(width+delta, m.width)
 	m.savePreferences()
 }
+
+func (m *Model) resizeResponseSplit(delta int) {
+	if m.height < 12 {
+		return
+	}
+	m.setResponseSplitRow(m.responseDivider() + delta)
+}
+
+func (m *Model) setResponseSplitRow(row int) {
+	height := m.height
+	if height <= 0 {
+		height = 24
+	}
+	minimum, maximum := m.responseSplitBounds(height)
+	row = max(minimum, min(row, maximum))
+	m.responseSplitPercent = (row*100 + height/2) / height
+	m.savePreferences()
+}
+
+func (m *Model) handleResponseSplitMouse(message tea.MouseMsg) bool {
+	if m.mode != browseMode && m.mode != requestEditMode {
+		return false
+	}
+	if m.responseSplitDragging {
+		switch message.Action {
+		case tea.MouseActionMotion:
+			if message.Button == tea.MouseButtonLeft {
+				m.setResponseSplitRow(message.Y)
+			}
+			return true
+		case tea.MouseActionRelease:
+			m.responseSplitDragging = false
+			return true
+		}
+	}
+	if message.Action == tea.MouseActionPress && message.Button == tea.MouseButtonLeft && message.X >= m.explorerWidth() && message.Y == m.responseDivider() {
+		m.responseSplitDragging = true
+		m.focus = responsePane
+		m.setResponseSplitRow(message.Y)
+		return true
+	}
+	return false
+}
+
 func (m *Model) savePreferences() {
 	if m.service != nil {
-		_ = m.service.SaveUIPreferences(m.collection, m.explorer)
+		_ = m.service.SaveUIPreferences(m.collection, m.explorer, m.responseSplitPercent)
 	}
 }
 func (m *Model) handleRune(s string) {
@@ -896,6 +970,11 @@ func (m *Model) handleEditorKey(key tea.KeyMsg) tea.Cmd {
 			}
 		}
 	case tea.KeyCtrlP:
+		if !m.commitEditorField() {
+			return nil
+		}
+		m.prompt = &confirmation{kind: commandPalette}
+	case tea.KeyCtrlK:
 		if !m.commitEditorField() {
 			return nil
 		}
