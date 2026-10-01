@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,8 +51,8 @@ func TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall(t *testing.T) {
 		t.Fatalf("discovered %d collections, want 2", got)
 	}
 	users := opened.Collections["users"]
-	if got := len(users.Tree.Invalid); got != 1 {
-		t.Fatalf("invalid sibling requests = %d, want 1", got)
+	if got := len(users.Tree.Invalid); got != 2 {
+		t.Fatalf("invalid sibling requests = %d, want 2", got)
 	}
 	for id, invalid := range users.Tree.Invalid {
 		if len(invalid.Diagnostics) == 0 {
@@ -215,7 +216,7 @@ func assertRuntimeContainsNoSecrets(t *testing.T, root string) {
 			return err
 		}
 		for _, secret := range secrets {
-			if strings.Contains(string(data), secret) {
+			if strings.Contains(string(data), secret) || strings.Contains(string(data), base64.StdEncoding.EncodeToString([]byte(secret))) {
 				t.Errorf("runtime file %s contains sensitive fixture value %q", path, secret)
 			}
 		}

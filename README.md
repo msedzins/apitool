@@ -74,7 +74,7 @@ cd examples/workspace
 go run ../../cmd/apitool -e test
 ```
 
-The end-to-end fixture test copies a two-collection workspace into a temporary Git repository and uses only a local HTTP server. It verifies request editing and execution, OAuth and request credential handling, response caching, history, safe logs, and that `.apitool/` stays out of Git status. Run it with:
+The end-to-end fixture test copies `testdata/workspace/` into a temporary Git repository. It includes invalid requests, including malformed YAML, to demonstrate validation errors alongside valid siblings. The test injects endpoint and credential values through the process environment, sends one request to an in-process HTTP server, and checks request editing, OAuth and request credential handling, response caching, history, redacted logs, and that `.apitool/` stays out of Git status. It requires no external API or credentials. Run it with:
 
 ```sh
 go test ./internal/app -run TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall
