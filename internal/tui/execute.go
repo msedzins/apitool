@@ -181,7 +181,7 @@ func (m *Model) executionKey(k tea.KeyMsg) (bool, tea.Cmd) {
 	if m.sending && (k.Type == tea.KeyCtrlE || (m.mode == requestEditMode && k.Type == tea.KeyCtrlS)) {
 		return true, nil
 	}
-	if k.Type == tea.KeyCtrlJ {
+	if k.Type == tea.KeyCtrlJ && !(m.mode == requestEditMode && m.editor != nil && m.editorField == 6 && m.editor.mode == BodyModeJSON) {
 		return true, m.beginSend()
 	}
 	if m.authOpen {

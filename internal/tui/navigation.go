@@ -77,10 +77,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if handled, cmd := m.executionKey(x); handled {
 			return m, cmd
 		}
-		if m.mode == requestEditMode && x.Type == tea.KeyRunes && string(x.Runes) == "?" {
-			m.help = true
-			return m, nil
-		}
 		if m.mode == requestEditMode {
 			if m.sending {
 				return m, nil
