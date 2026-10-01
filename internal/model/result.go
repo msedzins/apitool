@@ -33,6 +33,7 @@ type ExecutionStage string
 
 const (
 	StageRequestBuild ExecutionStage = "request_build"
+	StageResolution   ExecutionStage = "resolution"
 	StageOAuth        ExecutionStage = "oauth"
 	StageTransport    ExecutionStage = "transport"
 )
@@ -41,6 +42,7 @@ type ExecutionCategory string
 
 const (
 	CategoryRequestBuild ExecutionCategory = "request_build"
+	CategoryResolution   ExecutionCategory = "resolution"
 	CategoryOAuth        ExecutionCategory = "oauth"
 	CategoryDNS          ExecutionCategory = "dns"
 	CategoryConnection   ExecutionCategory = "connection"
