@@ -45,6 +45,16 @@ func statusColor(c int) lipgloss.Color {
 	return "10"
 }
 func (m Model) View() string {
+	if m.prompt != nil {
+		return m.confirmationView()
+	}
+	if m.mode == requestEditMode && m.height > 0 && m.height < 22 {
+		view := m.editorDisplay()
+		if m.help {
+			return m.helpView(view)
+		}
+		return view
+	}
 	var view string
 	if m.mode == collectionPickerMode {
 		view = m.collectionPickerView()
@@ -88,7 +98,9 @@ func (m Model) collectionView() string {
 	left, right := make([]string, height), make([]string, height)
 	if height > 1 {
 		left[1] = paneHeading(m.focus == collectionPane, "Collections / tree")
-		if request, ok := m.activeRequest(); ok {
+		if m.mode == requestEditMode && m.editor != nil {
+			right[1] = paneHeading(m.focus == requestPane, "Request editor")
+		} else if request, ok := m.activeRequest(); ok {
 			urlWidth := 48
 			if m.focus == requestPane {
 				urlWidth = 46
@@ -97,7 +109,11 @@ func (m Model) collectionView() string {
 		}
 	}
 	if height > 3 {
-		right[3] = " Params | Headers | Auth | Body | Settings"
+		if m.mode == requestEditMode && m.editor != nil {
+			right[3] = "Tab next • Enter newline • Ctrl+S save • ? help"
+		} else {
+			right[3] = " Params | Headers | Auth | Body | Settings"
+		}
 	}
 	for index, line := range m.collectionTreeLines() {
 		row := index + 3
@@ -127,18 +143,84 @@ func (m Model) collectionView() string {
 		}
 	}
 	responseDivider := 8
+	if m.mode == requestEditMode && m.editor != nil && height >= 22 {
+		responseDivider = 17
+		labels := []string{"Name", "Method", "URL", "Params", "Headers", "Auth"}
+		for index, label := range labels {
+			row := index + 4
+			value := m.editorFieldTextFor(index)
+			marker := "  "
+			if m.editorField == index {
+				marker = "▶ "
+			}
+			right[row] = marker + label + ": " + value
+		}
+		bodyMode := "JSON"
+		if m.editor.mode == BodyModeRaw {
+			bodyMode = "Raw"
+		}
+		marker := "  "
+		if m.editorField == 6 {
+			marker = "▶ "
+		}
+		right[10] = marker + "Body (" + bodyMode + ")"
+		body := m.editorFieldTextFor(6)
+		bodyLines := strings.Split(body, "\n")
+		cursorRow, cursorCol := bodyCursorPosition(body, m.fieldCursor)
+		visibleRows := 5
+		if m.editorField == 6 {
+			if cursorRow < m.bodyScroll {
+				m.bodyScroll = cursorRow
+			}
+			if cursorRow >= m.bodyScroll+visibleRows {
+				m.bodyScroll = cursorRow - visibleRows + 1
+			}
+		}
+		for offset := 0; offset < visibleRows && 11+offset < responseDivider; offset++ {
+			lineIndex := m.bodyScroll + offset
+			if lineIndex >= len(bodyLines) {
+				break
+			}
+			line := bodyLines[lineIndex]
+			available := max(1, rightWidth-2)
+			if m.editorField == 6 && lineIndex == cursorRow {
+				line = scrollBodyLineToCursor(line, cursorCol, available)
+			} else {
+				line = truncateRunes(line, available)
+			}
+			right[11+offset] = "  " + line
+		}
+		if m.duplicateFlow && responseDivider-1 < height {
+			right[responseDivider-1] = "  Save as: " + m.editorFieldTextFor(7)
+		} else if m.editor.Validation() != "" && responseDivider-1 < height {
+			validation := []rune(m.editor.Validation())
+			available := max(0, rightWidth-len([]rune("  Validation: ")))
+			if len(validation) > available {
+				validation = validation[len(validation)-available:]
+			}
+			right[responseDivider-1] = "  Validation: " + string(validation)
+		}
+	}
 	if responseDivider < height {
 		right[responseDivider+1] = paneHeading(m.focus == responsePane, "Response / Diagnostics / Request Log")
 	}
 	if responseDivider+2 < height {
 		right[responseDivider+2] = " Select Send to execute this request."
 		messageRows := 0
-		if m.message != "" {
-			message := []rune(m.message)
+		if m.message != "" || (m.mode == requestEditMode && m.editor != nil && m.editor.Validation() != "") {
+			statusText := m.message
+			if statusText == "" && m.editor != nil {
+				statusText = m.editor.Validation()
+			}
+			status := statusText
+			if m.mode == requestEditMode {
+				status = " Status: " + status
+			}
+			message := []rune(status)
 			right[responseDivider+2] = string(message[:min(len(message), rightWidth)])
 			messageRows = 1
 			if len(message) > rightWidth && responseDivider+3 < height {
-				right[responseDivider+3] = string(message[rightWidth:])
+				right[responseDivider+3] = string(message[rightWidth:min(len(message), 2*rightWidth)])
 				messageRows++
 			}
 		}
@@ -187,6 +269,9 @@ func panePrefix(active bool) string {
 func paneHeading(active bool, text string) string { return panePrefix(active) + text }
 
 func (m Model) helpView(background string) string {
+	if m.mode == requestEditMode {
+		return editorHelpView()
+	}
 	if m.mode != browseMode || m.width < 100 || m.height < 30 {
 		return compactHelpView()
 	}
@@ -202,6 +287,7 @@ func (m Model) helpView(background string) string {
 		"│ Workspace   Ctrl+P collections                   │",
 		"│ Environment Ctrl+E select env                    │",
 		"│ Search      / find request                       │",
+		"│ Request     e edit selected request              │",
 		"│ Layout      Ctrl+←/→ resize split                │",
 		"│ Help        ? or Esc close                       │",
 		"│ Exit        Ctrl+C quit                          │",
@@ -223,6 +309,48 @@ func (m Model) helpView(background string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+func bodyCursorPosition(text string, cursor int) (int, int) {
+	runes := []rune(text)
+	cursor = max(0, min(cursor, len(runes)))
+	before := string(runes[:cursor])
+	row := strings.Count(before, "\n")
+	column := len([]rune(before[strings.LastIndex(before, "\n")+1:]))
+	return row, column
+}
+func insertRuneMarker(text string, column int) string {
+	runes := []rune(text)
+	column = max(0, min(column, len(runes)))
+	return string(runes[:column]) + "▏" + string(runes[column:])
+}
+func scrollBodyLineToCursor(text string, column, width int) string {
+	runes := []rune(text)
+	column = max(0, min(column, len(runes)))
+	width = max(width, 1)
+	start := max(0, column-width+1)
+	end := min(len(runes), start+width-1)
+	return insertRuneMarker(string(runes[start:end]), column-start)
+}
+func truncateRunes(text string, width int) string {
+	runes := []rune(text)
+	return string(runes[:min(len(runes), max(width, 0))])
+}
+
+func editorHelpView() string {
+	return strings.Join([]string{
+		"Request editor shortcuts",
+		"Fields      Tab next",
+		"Body        Enter inserts newline",
+		"Cursor      ←/→ move • Home/End line • ↑/↓ body lines",
+		"Requests    Ctrl+↑/↓ previous/next",
+		"Save        Ctrl+S save • Esc close",
+		"Body mode   Ctrl+B toggle JSON/raw",
+		"History     Ctrl+Z undo • Ctrl+Y redo",
+		"Actions     Ctrl+P duplicate/delete",
+		"Help        ? or Esc close",
+		"Exit        Ctrl+C quit",
+	}, "\n") + "\n"
+}
+
 func compactHelpView() string {
 	return strings.Join([]string{
 		"Keyboard shortcuts",
@@ -232,6 +360,7 @@ func compactHelpView() string {
 		"Workspace   Ctrl+P collections",
 		"Environment Ctrl+E select env",
 		"Search      / find request",
+		"Request     e edit selected request",
 		"Layout      Ctrl+←/→ resize split",
 		"Help        ? or Esc close",
 		"Exit        Ctrl+C quit",
