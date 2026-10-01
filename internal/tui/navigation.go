@@ -38,8 +38,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			e := m.effectiveSelection(selection)
 			m.sendPrompt = &sendConfirmation{selection: selection, method: e.Method, url: safeRequestURL(e)}
 		} else {
-			m.result = x.result
-			m.responseOffset = 0
+			current, ok := m.executionSelection()
+			if ok && sameSelection(m.sendSelection, x.selection) && sameSelection(current, x.selection) {
+				m.result = x.result
+				m.resultSelection = x.selection
+				m.resultCached = false
+				m.responseOffset = 0
+			}
 		}
 		return m, nil
 	case authFinishedMsg:
@@ -336,6 +341,8 @@ func (m *Model) openSelected() {
 	} else if row.kind == requestRow {
 		m.focus = requestPane
 		m.message = "Request: " + row.id
+		m.clearResult()
+		m.loadCachedResponse()
 	} else if row.kind == invalidRow {
 		if invalid, ok := m.view.Tree.Invalid[row.id]; ok {
 			details := make([]string, 0, len(invalid.Diagnostics))
@@ -522,6 +529,8 @@ func (m *Model) openSearchSelection() {
 	m.mode = browseMode
 	m.treeIndex = indexRow(m.visibleRows(), id)
 	m.focus, m.message = requestPane, "Request: "+id
+	m.clearResult()
+	m.loadCachedResponse()
 }
 func (m Model) environmentNames() []string {
 	r := make([]string, 0, len(m.view.Environments))
@@ -683,6 +692,8 @@ func (m *Model) beginEdit(id string) {
 	m.draftUndo, m.draftRedo = nil, nil
 	m.jsonTextPresentation, m.jsonCursor = false, 0
 	m.jsonScalarDraft, m.jsonScalarDirty, m.jsonScalarCursor, m.jsonScalarDraftLoaded = "", false, 0, false
+	m.clearResult()
+	m.loadCachedResponse()
 	if ok {
 		m.message = ""
 	}

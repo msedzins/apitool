@@ -51,6 +51,8 @@ type Model struct {
 	sendSelection                        app.Selection
 	sendPrompt                           *sendConfirmation
 	result                               app.SendResult
+	resultSelection                      app.Selection
+	resultCached                         bool
 	responseOffset, responseTab          int
 	rawResponse                          bool
 	authOpen, authLoading, tokenRevealed bool
@@ -159,6 +161,7 @@ func (m *Model) openCollection(path string) {
 		m.message = err.Error()
 		return
 	}
+	m.clearResult()
 	for _, diagnostic := range view.Diagnostics {
 		if diagnostic.Code == "collection_load" {
 			m.collection, m.view = path, view
@@ -191,6 +194,7 @@ func (m *Model) openCollection(path string) {
 		m.expanded[group.ID] = true
 	}
 	m.savePreferences()
+	m.loadCachedResponse()
 }
 
 func (m *Model) selectEnvironment(environment string) {
@@ -201,4 +205,6 @@ func (m *Model) selectEnvironment(environment string) {
 	}
 	m.view, m.mode, m.message = view, browseMode, ""
 	m.pendingEnvironment = ""
+	m.clearResult()
+	m.loadCachedResponse()
 }

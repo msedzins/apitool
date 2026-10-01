@@ -247,6 +247,14 @@ func (s *Service) SearchHistory(_ context.Context, query string) ([]runtime.Hist
 	return s.store.SearchHistory(query)
 }
 
+// CachedResponse returns the latest saved response for the selected definition identity.
+func (s *Service) CachedResponse(_ context.Context, selection Selection) (model.Response, error) {
+	if s.store == nil {
+		return model.Response{}, errors.New("workspace is not open")
+	}
+	return s.store.LatestResponse(runtime.Key{CollectionPath: selection.Collection, Environment: selection.Environment, RequestID: selection.RequestID})
+}
+
 func (s *Service) SelectEnvironment(_ context.Context, collectionPath, environment string) (CollectionView, error) {
 	view, err := s.collection(collectionPath)
 	if err != nil {

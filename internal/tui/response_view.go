@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"apitool/internal/auth"
+	"apitool/internal/model"
 	"apitool/internal/runtime"
 )
 
@@ -31,6 +32,16 @@ func (m Model) responseLines() []string {
 		}
 		return append(lines, strings.Split(strings.TrimSuffix(m.gitOutput, "\n"), "\n")...)
 	}
+	if !m.hasCurrentResult() {
+		switch m.responseTab {
+		case 1:
+			return []string{"No execution diagnostic."}
+		case 2:
+			return []string{"Request Log (redacted)", "No request log entries."}
+		default:
+			return nil
+		}
+	}
 	if m.responseTab == 2 {
 		return m.logLines()
 	}
@@ -43,13 +54,24 @@ func (m Model) responseLines() []string {
 		return append(lines, m.logLines()...)
 	}
 	if m.responseTab == 1 {
+		if len(m.result.Diagnostics) > 0 {
+			return diagnosticLines(m.result.Diagnostics)
+		}
 		return []string{"No execution diagnostic."}
 	}
 	if m.result.Response == nil {
 		return nil
 	}
 	r := m.result.Response
-	lines := []string{fmt.Sprintf("%d %s • %s • %d bytes", r.StatusCode, http.StatusText(r.StatusCode), r.Duration, len(r.Body)), "Headers:"}
+	statusLine := fmt.Sprintf("%d %s • %s • %d bytes", r.StatusCode, http.StatusText(r.StatusCode), r.Duration, len(r.Body))
+	if m.resultCached {
+		statusLine += " • Cached response"
+	}
+	lines := []string{statusLine}
+	if len(m.result.Diagnostics) > 0 {
+		lines = append(lines, diagnosticLines(m.result.Diagnostics)...)
+	}
+	lines = append(lines, "Headers:")
 	headers := runtime.RedactHeaders(r.Headers)
 	names := make([]string, 0, len(headers))
 	for k := range headers {
@@ -67,6 +89,17 @@ func (m Model) responseLines() []string {
 	}
 	lines = append(lines, title)
 	return append(lines, strings.Split(body, "\n")...)
+}
+func diagnosticLines(diagnostics []model.Diagnostic) []string {
+	lines := []string{"Execution diagnostics"}
+	for _, diagnostic := range diagnostics {
+		message := diagnostic.Message
+		if diagnostic.Path != "" {
+			message = diagnostic.Path + ": " + message
+		}
+		lines = append(lines, string(diagnostic.Code)+": "+message)
+	}
+	return lines
 }
 func (m Model) logLines() []string {
 	lines := []string{"Request Log (redacted)"}
