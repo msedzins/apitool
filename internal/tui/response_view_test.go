@@ -98,6 +98,50 @@ func TestResponseResultStaysScopedToSelectedEnvironment(t *testing.T) {
 	}
 }
 
+func TestCachedResponseRecallStaysScopedToEnvironment(t *testing.T) {
+	m, _ := requestScreen(t, "GET", false)
+	workspace, err := m.service.Workspace()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace.Root, "demo", ".api", "environments", "prod.yaml"), []byte("name: prod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := runtime.Open(workspace.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := m.service.OpenWorkspace(context.Background(), workspace.Root, app.OpenOptions{Collection: "demo", Environment: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.view = opened.Collections["demo"]
+	selection, ok := m.executionSelection()
+	if !ok {
+		t.Fatal("request selection is unavailable")
+	}
+	for environment, body := range map[string]string{
+		"prod": `{"source":"prod-cache-marker"}`,
+		"test": `{"source":"test-cache-marker"}`,
+	} {
+		key := runtime.Key{CollectionPath: selection.Collection, Environment: environment, RequestID: selection.RequestID}
+		if err := store.SaveResponse(key, model.Response{StatusCode: http.StatusOK, Body: []byte(body)}); err != nil {
+			t.Fatalf("SaveResponse(%s) error = %v", environment, err)
+		}
+	}
+
+	m.selectEnvironment("prod")
+	prodLines := strings.Join(m.responseLines(), "\n")
+	if !strings.Contains(prodLines, "prod-cache-marker") || strings.Contains(prodLines, "test-cache-marker") {
+		t.Fatalf("prod cache view = %q selection=%#v", prodLines, selection)
+	}
+	m.selectEnvironment("test")
+	testLines := strings.Join(m.responseLines(), "\n")
+	if !strings.Contains(testLines, "test-cache-marker") || strings.Contains(testLines, "prod-cache-marker") {
+		t.Fatalf("test cache view = %s", testLines)
+	}
+}
+
 func TestStaleSendCompletionCannotReplaceCurrentEnvironmentResponse(t *testing.T) {
 	m, _ := requestScreen(t, "GET", false)
 	workspace, _ := m.service.Workspace()
