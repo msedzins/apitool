@@ -1,0 +1,5 @@
+name: Broken request
+method: GET
+request:
+  url: "{{base_url}}/users"
+  this is not valid yaml

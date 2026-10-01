@@ -1,0 +1,5 @@
+name: test
+variables:
+  base_url: ${APITOOL_TEST_SERVER}
+  access_token: ${APITOOL_FIXTURE_ACCESS_TOKEN}
+  fixture_secret: ${APITOOL_FIXTURE_SECRET}
