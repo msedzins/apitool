@@ -334,6 +334,9 @@ func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
 	}
 	node, ok := view.Tree.Requests[selection.RequestID]
 	if !ok {
+		if invalid, found := view.Tree.Invalid[selection.RequestID]; found && invalid.Request != nil {
+			return SendResult{Diagnostics: append([]model.Diagnostic(nil), invalid.Diagnostics...), ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Request definition is invalid"}}
+		}
 		return executionResult(fmt.Errorf("request %q not found", selection.RequestID))
 	}
 	if hasErrors(node.Diagnostics) {
@@ -349,12 +352,18 @@ func (s *Service) Send(ctx context.Context, selection Selection) SendResult {
 	for i := range node.Groups {
 		groups[i] = node.Groups[i].Group
 	}
+	key := runtime.Key{CollectionPath: selection.Collection, Environment: selection.Environment, RequestID: selection.RequestID}
 	effective, diagnostics := resolve.Effective(view.Collection, env, groups, node.Request)
 	if hasErrors(diagnostics) {
-		return SendResult{Diagnostics: diagnostics, ExecutionError: &model.ExecutionError{Stage: model.StageRequestBuild, Category: model.CategoryRequestBuild, SafeMessage: "Request definition is invalid"}}
+		executionError := &model.ExecutionError{Stage: model.StageResolution, Category: model.CategoryResolution, SafeMessage: "Request values could not be resolved"}
+		log := runtime.LogEntry{Key: key, Method: node.Request.Method, ErrorCategory: executionError.Category}
+		storageDiagnostics := []model.Diagnostic(nil)
+		if err := s.store.AppendLog(log); err != nil {
+			storageDiagnostics = append(storageDiagnostics, storageDiagnostic("runtime_log_write", ".apitool/logs/executions.jsonl", "could not write execution log"))
+		}
+		return SendResult{Diagnostics: append(diagnostics, storageDiagnostics...), ExecutionError: executionError, Logs: []runtime.LogEntry{log}}
 	}
 	response, execErr := s.deps.Execute(ctx, effective, s.deps.TokenProvider)
-	key := runtime.Key{CollectionPath: selection.Collection, Environment: selection.Environment, RequestID: selection.RequestID}
 	log := executionLog(key, effective, response, execErr)
 	var storageDiagnostics []model.Diagnostic
 	if err := s.store.AppendLog(log); err != nil {

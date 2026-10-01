@@ -12,7 +12,7 @@
 
 ## Task status
 
-Reviewed on 2026-10-01. Tasks 1–12 have delivered implementations; Task 13 remains planned.
+Reviewed on 2026-10-01. Tasks 1–13 have delivered implementations.
 
 - **Implemented:** delivered and reviewed, with no confirmed outstanding correction in this review.
 - **Needs corrections:** delivered, but the corrective checklist must pass before completion.
@@ -37,7 +37,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-010](#task-10-status) | Implemented | Send workflow and response/diagnostic/token views. |
 | [T-011](#task-11-status) | Implemented | History, Git palette, split resizing and user documentation. |
 | [T-012](#task-12-status) | Implemented | Assembled end-to-end verification. |
-| [T-013](#task-13-status) | Planned | CI quality gate. |
+| [T-013](#task-13-status) | Implemented | CI quality gate. |
 
 Correction order: Task 1 → Task 3 → Task 6 for auth/containment/storage safety; Task 7 redaction can be completed independently, followed by Task 5 cache isolation and Tasks 8–9 editor corrections. Keep future response rendering in Task 10.
 
@@ -972,7 +972,7 @@ git commit -m "test: verify end-to-end MVP workflow"
 <a id="task-13-status"></a>
 ### Task 13: GitHub Actions continuous-integration gate
 
-**Status:** Planned
+**Status:** Implemented
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
@@ -981,11 +981,11 @@ git commit -m "test: verify end-to-end MVP workflow"
 - Consumes `go.mod` for the declared Go version and the repository test/build entry points produced by Tasks 1–12.
 - Produces one GitHub Actions workflow named `CI`, triggered by `push` and `pull_request`.
 
-- [ ] **Step 1: Write the workflow acceptance checks**
+- [x] **Step 1: Write the workflow acceptance checks**
 
 The workflow must fail when `gofmt -l .` returns any path, when `go test ./...` fails, when `go vet ./...` fails, or when `go build ./cmd/apitool` fails. It must use no GitHub secrets and request only `contents: read` permission.
 
-- [ ] **Step 2: Create the workflow**
+- [x] **Step 2: Create the workflow**
 
 ```yaml
 name: CI
@@ -1016,13 +1016,13 @@ jobs:
         run: go build ./cmd/apitool
 ```
 
-- [ ] **Step 3: Verify the equivalent local commands**
+- [x] **Step 3: Verify the equivalent local commands**
 
 Run: `test -z "$(gofmt -l .)" && go test ./... && go vet ./... && go build ./cmd/apitool`
 
 Expected: exit code 0 after Tasks 1–12 have created the Go module and binary.
 
-- [ ] **Step 4: Commit CI configuration**
+- [x] **Step 4: Commit CI configuration**
 
 ```bash
 git add .github/workflows/ci.yml
