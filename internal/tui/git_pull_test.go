@@ -33,6 +33,8 @@ func TestGitPullReloadsDefinitionsBeforeNextSend(t *testing.T) {
 
 	clone := filepath.Join(t.TempDir(), "upstream")
 	workflowGitCommand(t, t.TempDir(), "clone", remote, clone)
+	workflowGitCommand(t, clone, "config", "user.email", "fixture@example.test")
+	workflowGitCommand(t, clone, "config", "user.name", "Fixture Test")
 	requestPath := filepath.Join(clone, "users", ".api", "requests", "users", "list.yaml")
 	request := "name: List users after pull\nmethod: PATCH\nrequest:\n  url: '{{base_url}}/v2/users'\n  body:\n    type: raw\n    content: pulled-body\n"
 	if err := os.WriteFile(requestPath, []byte(request), 0o644); err != nil {
