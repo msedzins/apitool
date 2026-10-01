@@ -12,7 +12,7 @@
 
 ## Task status
 
-Reviewed on 2026-09-30. Tasks 1–9 have delivered implementations; the review identified corrective work below. Passing existing tests does not close a confirmed gap. Tasks 10–13 remain planned; this review did not certify their completion.
+Reviewed on 2026-10-01. Tasks 1–11 have delivered implementations; Tasks 12–13 remain planned.
 
 - **Implemented:** delivered and reviewed, with no confirmed outstanding correction in this review.
 - **Needs corrections:** delivered, but the corrective checklist must pass before completion.
@@ -34,8 +34,8 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-007](#task-7-status) | Implemented | Redact multiline credentials from Git diffs. |
 | [T-008](#task-8-status) | Implemented | Editor focus and mode-aware mouse routing verified. |
 | [T-009](#task-9-status) | Implemented | Structured JSON editing and recoverable drafts verified. |
-| [T-010](#task-10-status) | Planned | Send workflow and response/diagnostic/token views. |
-| [T-011](#task-11-status) | Planned | History, Git palette, split resizing and user documentation. |
+| [T-010](#task-10-status) | Implemented | Send workflow and response/diagnostic/token views. |
+| [T-011](#task-11-status) | Implemented | History, Git palette, split resizing and user documentation. |
 | [T-012](#task-12-status) | Planned | Assembled end-to-end verification. |
 | [T-013](#task-13-status) | Planned | CI quality gate. |
 
@@ -784,7 +784,7 @@ Files: `internal/tui/editor.go`, `internal/tui/navigation.go`, `internal/tui/vie
 <a id="task-10-status"></a>
 ### Task 10: Send workflow, response/diagnostic/auth/log panels, and dangerous-operation confirmation
 
-**Status:** Planned
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/execute.go`
@@ -797,7 +797,7 @@ Files: `internal/tui/editor.go`, `internal/tui/navigation.go`, `internal/tui/vie
 - Consumes `app.Send`, `runtime.Store`, and `auth.Mask`.
 - Produces send command messages with either `model.Response` or `model.ExecutionError` and redacted log entries.
 
-- [ ] **Step 1: Write failing send/view tests**
+- [x] **Step 1: Write failing send/view tests**
 
 ```go
 func TestConfirmDangerousRequiresExplicitSendForDelete(t *testing.T) {
@@ -814,27 +814,27 @@ func TestHTTP401RendersResponseNotFailure(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/tui -run 'Test(ConfirmDangerousRequiresExplicitSendForDelete|HTTP401RendersResponseNotFailure)'`
 
 Expected: FAIL because send and response views do not exist.
 
-- [ ] **Step 3: Implement execution UI**
+- [x] **Step 3: Implement execution UI**
 
 Bind `Ctrl+Enter` and Send button to exactly one app send. In confirmation mode, POST/PUT/PATCH/DELETE render a modal with environment, method, resolved safe URL, cancel, and send actions; GET sends immediately. During send show a non-blocking busy state. Render response status, duration, size, headers, pretty JSON body, and raw body in the lower pane. Render execution errors in a diagnostic card with stage/category/safe message and the redacted request log. Add an Auth tab showing grant, endpoint, scopes, expiry, and a masked token; full token is revealed only after `Show token` and never copied to log/history/cache.
 
-- [ ] **Step 4: Add send/view tests**
+- [x] **Step 4: Add send/view tests**
 
 Test POST confirmation accepted invokes one send; rejected confirmation invokes none; 500 is a response; DNS/OAuth errors show diagnostic stage; JSON response pretty-print falls back to raw text; sensitive headers/log values are masked; token starts masked and reveal is session-only.
 
-- [ ] **Step 5: Run TUI suite**
+- [x] **Step 5: Run TUI suite**
 
 Run: `go test ./internal/tui`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit execution UI**
+- [x] **Step 6: Commit execution UI**
 
 ```bash
 git add internal/tui
@@ -844,7 +844,7 @@ git commit -m "feat: add request execution and response diagnostics"
 <a id="task-11-status"></a>
 ### Task 11: TUI history, Git commands, layout resizing, and final user-facing documentation
 
-**Status:** Planned
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/tui/history.go`
@@ -853,12 +853,17 @@ git commit -m "feat: add request execution and response diagnostics"
 - Create: `internal/tui/git_test.go`
 - Create: `README.md`
 - Modify: `internal/tui/model.go`
+- Modify: `internal/app/service.go`
+- Modify: `internal/runtime/store.go`
+- Create: `cmd/apitool/main_test.go`
+- Modify: `testdata/ui-015/keyboard-help.txt`
+- Modify: `internal/tui/navigation.go`, `internal/tui/confirm.go`, `internal/tui/view.go`, and `internal/tui/response_view.go`
 
 **Interfaces:**
 - Consumes Task 5 history/state and Task 7 Git adapter.
 - Produces palette actions `History`, `Git: Status`, `Git: Diff`, `Git: Pull`, `Git: Push`, `Git: Commit` and persisted panel-split preferences.
 
-- [ ] **Step 1: Write failing history/Git UI tests**
+- [x] **Step 1: Write failing history/Git UI tests**
 
 ```go
 func TestHistorySearchReopensReferencedRequest(t *testing.T) {
@@ -875,27 +880,27 @@ func TestGitCommitPromptsForNonBlankMessage(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `go test ./internal/tui -run 'Test(HistorySearchReopensReferencedRequest|GitCommitPromptsForNonBlankMessage)'`
 
 Expected: FAIL because history and Git views do not exist.
 
-- [ ] **Step 3: Implement history, Git, and resizing**
+- [x] **Step 3: Implement history, Git, and resizing**
 
 Create searchable local history ordered newest first; `Enter` reopens the referenced current definition, not a saved request-body snapshot. Add palette Git actions that show adapter result output and never add/stage files. Commit asks for a nonblank message. Implement keyboard and mouse resizing for request/response split with a bounded minimum height for both panes, then persist the ratio in `.apitool/state.json`.
 
-- [ ] **Step 4: Write README usage and safety instructions**
+- [x] **Step 4: Write README usage and safety instructions**
 
 Document workspace layout, `.apitool/` and `.gitignore`, safe environment YAML examples, process-env secrets, `apitool -e test`, `apitool -e prod -c`, hybrid save, Git command limitations, and the explicit non-MVP feature list. Do not include a literal secret or access token in any example.
 
-- [ ] **Step 5: Add final UI tests and run all tests**
+- [x] **Step 5: Add final UI tests and run all tests**
 
 Test empty history state; history filter; Git command errors visible without panic; split resizing respects minima; state persistence restores split; and README command examples match CLI flags. Run: `go test ./...`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit final MVP surfaces**
+- [x] **Step 6: Commit final MVP surfaces**
 
 ```bash
 git add internal/tui README.md
