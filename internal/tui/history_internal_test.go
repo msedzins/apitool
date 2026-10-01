@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,5 +57,35 @@ func TestSendReplacesPreviousGitOutput(t *testing.T) {
 	m = next.(Model)
 	if got := m.View(); !strings.Contains(got, "201 Created") || !strings.Contains(got, "created") || strings.Contains(got, "working tree clean") {
 		t.Fatalf("response after Git action = %q, want the new HTTP response only", got)
+	}
+}
+
+func TestHistoryReopensCurrentRequestThatNowHasDiagnostics(t *testing.T) {
+	m := editorWithJSON(t, `{"a":1}`)
+	workspace, err := m.service.Workspace()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := runtime.Open(workspace.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendHistory(runtime.Key{CollectionPath: m.collection, Environment: "test", RequestID: "one"}, "POST", model.Response{StatusCode: 201}, nil); err != nil {
+		t.Fatal(err)
+	}
+	requestPath := filepath.Join(m.view.Root, ".api", "requests", "one.yaml")
+	if err := os.WriteFile(requestPath, []byte("name: [invalid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.OpenWorkspace(context.Background(), workspace.Root, app.OpenOptions{Collection: m.collection}); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("one")})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	rows := m.visibleRows()
+	if m.mode != browseMode || m.treeIndex < 0 || m.treeIndex >= len(rows) || rows[m.treeIndex].kind != invalidRow || m.message == "" {
+		t.Fatalf("history reopen mode=%v selection=%#v treeIndex=%d message=%q, want current invalid definition selected", m.mode, rows, m.treeIndex, m.message)
 	}
 }

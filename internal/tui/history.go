@@ -107,6 +107,12 @@ func (m *Model) reopenHistoryEntry(entry runtime.HistoryEntry) {
 		m.message = fmt.Sprintf("Environment %q no longer exists for %q", entry.Environment, entry.CollectionPath)
 		return
 	}
+	if _, ok := view.Tree.Requests[entry.RequestID]; !ok {
+		if _, invalid := view.Tree.Invalid[entry.RequestID]; !invalid {
+			m.message = fmt.Sprintf("Referenced request %q no longer exists", entry.RequestID)
+			return
+		}
+	}
 	view, err = m.service.SelectEnvironment(context.Background(), entry.CollectionPath, entry.Environment)
 	if err != nil {
 		m.message = "Could not select history environment: " + err.Error()
@@ -124,13 +130,20 @@ func (m *Model) reopenHistoryEntry(entry runtime.HistoryEntry) {
 	m.gitAction, m.gitOutput = "", ""
 	rows := m.visibleRows()
 	for index, row := range rows {
-		if row.kind == requestRow && row.id == entry.RequestID {
+		if (row.kind == requestRow || row.kind == invalidRow) && row.id == entry.RequestID {
 			m.treeIndex = index
 			m.selectedID = entry.RequestID
+			m.treeOffset = 0
+			m.syncViewport()
+			if row.kind == invalidRow {
+				m.openSelected()
+			} else {
+				m.focus = requestPane
+			}
 			m.savePreferences()
 			return
 		}
 	}
 	m.mode = historyMode
-	m.message = fmt.Sprintf("Referenced request %q no longer exists", entry.RequestID)
+	m.message = fmt.Sprintf("Referenced request %q could not be selected", entry.RequestID)
 }

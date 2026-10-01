@@ -102,6 +102,21 @@ func TestMouseDragResizesRequestResponseSplit(t *testing.T) {
 	}
 }
 
+func TestHistoryReopenScrollsSelectedRequestIntoView(t *testing.T) {
+	m := historyScreenWithEntry(t, "check")
+	m = updateTUI(m, tea.KeyMsg{Type: tea.KeyEsc})
+	m = updateTUI(m, tea.WindowSizeMsg{Width: 90, Height: 12})
+	for range 60 {
+		m = updateTUI(m, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	m = updateTUI(m, tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = updateTUI(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	m = searchAndEnter(m, "check")
+	if got := m.View(); !strings.Contains(got, "> GET check") {
+		t.Fatalf("history reopen view = %q, want selected request visible in scrolled tree", got)
+	}
+}
+
 func historyScreenWithEntry(t *testing.T, requestID string) tui.Model {
 	t.Helper()
 	service := fixtureService(t)
