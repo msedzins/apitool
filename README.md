@@ -65,6 +65,30 @@ apitool -e prod -c
 
 Use the collection picker to select a collection, the environment picker to switch environments, `/` to search requests, and `e` to edit the selected request. The command palette (`Ctrl+K`) contains History and the Git actions. Press `?` for the keyboard guide.
 
+## Example workspace and checks
+
+The [example workspace](examples/workspace/README.md) contains two collections and an intentionally invalid request so you can try collection discovery and diagnostics without creating definitions first. Start it with:
+
+```sh
+cd examples/workspace
+go run ../../cmd/apitool -e test
+```
+
+The end-to-end fixture test copies a two-collection workspace into a temporary Git repository and uses only a local HTTP server. It verifies request editing and execution, OAuth and request credential handling, response caching, history, safe logs, and that `.apitool/` stays out of Git status. Run it with:
+
+```sh
+go test ./internal/app -run TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall
+```
+
+Run all release-readiness checks with:
+
+```sh
+gofmt -w cmd internal
+go test ./...
+go vet ./...
+go build ./cmd/apitool
+```
+
 ## Editing and saving
 
 Request edits are held in the editor until you save. `Ctrl+S` writes the current request definition. Leaving a dirty request asks whether to save, discard, or cancel. The editor changes only the selected request YAML file; it does not change environment or collection files unless you edit those separately.

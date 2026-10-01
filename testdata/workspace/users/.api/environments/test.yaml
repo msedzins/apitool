@@ -1,0 +1,4 @@
+name: test
+variables:
+  base_url: ${APITOOL_E2E_API_URL}
+  token_url: ${APITOOL_E2E_TOKEN_URL}

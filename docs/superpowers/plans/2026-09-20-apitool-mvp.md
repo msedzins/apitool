@@ -12,7 +12,7 @@
 
 ## Task status
 
-Reviewed on 2026-10-01. Tasks 1–11 have delivered implementations; Tasks 12–13 remain planned.
+Reviewed on 2026-10-01. Tasks 1–12 have delivered implementations; Task 13 remains planned.
 
 - **Implemented:** delivered and reviewed, with no confirmed outstanding correction in this review.
 - **Needs corrections:** delivered, but the corrective checklist must pass before completion.
@@ -36,7 +36,7 @@ Original steps for Tasks 1–9 are retained as reference without progress checkb
 | [T-009](#task-9-status) | Implemented | Structured JSON editing and recoverable drafts verified. |
 | [T-010](#task-10-status) | Implemented | Send workflow and response/diagnostic/token views. |
 | [T-011](#task-11-status) | Implemented | History, Git palette, split resizing and user documentation. |
-| [T-012](#task-12-status) | Planned | Assembled end-to-end verification. |
+| [T-012](#task-12-status) | Implemented | Assembled end-to-end verification. |
 | [T-013](#task-13-status) | Planned | CI quality gate. |
 
 Correction order: Task 1 → Task 3 → Task 6 for auth/containment/storage safety; Task 7 redaction can be completed independently, followed by Task 5 cache isolation and Tasks 8–9 editor corrections. Keep future response rendering in Task 10.
@@ -910,12 +910,14 @@ git commit -m "feat: complete history Git controls and documentation"
 <a id="task-12-status"></a>
 ### Task 12: End-to-end fixture verification and release-readiness checks
 
-**Status:** Planned
+**Status:** Implemented
 
 **Files:**
 - Create: `internal/app/e2e_test.go`
+- Create: `testdata/workspace/.gitignore`
 - Create: `testdata/workspace/users/.api/collection.yaml`
 - Create: `testdata/workspace/users/.api/environments/test.yaml`
+- Create: `testdata/workspace/users/.api/requests/broken.yaml`
 - Create: `testdata/workspace/users/.api/requests/users/list.yaml`
 - Modify: `README.md`
 
@@ -923,7 +925,7 @@ git commit -m "feat: complete history Git controls and documentation"
 - Consumes the complete binary/application stack from Tasks 1–11.
 - Produces a reproducible fixture with two valid collections and intentionally invalid sibling definitions.
 
-- [ ] **Step 1: Write the failing end-to-end scenario**
+- [x] **Step 1: Write the failing end-to-end scenario**
 
 ```go
 func TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall(t *testing.T) {
@@ -938,29 +940,29 @@ func TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the scenario and verify it fails before fixture completion**
+- [x] **Step 2: Run the scenario and verify it fails before fixture completion**
 
 Run: `go test ./internal/app -run TestFixtureWorkspaceCanDiscoverEditExecuteCacheAndRecall`
 
 Expected: FAIL until the two-collection fixture and test dependencies are complete.
 
-- [ ] **Step 3: Complete the fixture and verify all MVP boundaries**
+- [x] **Step 3: Complete the fixture and verify all MVP boundaries**
 
 Use a local test HTTP server and process-environment injection; never call an external API. Assert two collections are discoverable, one malformed request is marked invalid, a valid request executes once, response/history are written below `.apitool`, and no runtime path appears in `git status --short` after initializing the fixture repo. Add explicit assertions that cache/history/log contents do not include fixture secret or access token values.
 
-- [ ] **Step 4: Run quality gates**
+- [x] **Step 4: Run quality gates**
 
 Run: `gofmt -w cmd internal && go test ./... && go vet ./... && go build ./cmd/apitool`
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Manually exercise the terminal workflow**
+- [x] **Step 5: Manually exercise the terminal workflow**
 
 Run: `go run ./cmd/apitool -e test`
 
 Expected: collection picker appears; opening a collection shows request tree, editor, and response pane; no secret is visible by default.
 
-- [ ] **Step 6: Commit verification fixture**
+- [x] **Step 6: Commit verification fixture**
 
 ```bash
 git add internal/app testdata README.md

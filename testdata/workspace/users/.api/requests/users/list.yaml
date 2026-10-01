@@ -1,0 +1,11 @@
+name: List users
+method: POST
+request:
+  url: "{{base_url}}/users"
+  headers:
+    Cookie: "session=${APITOOL_E2E_COOKIE}"
+    Content-Type: text/plain
+    X-API-Key: ${APITOOL_E2E_API_KEY}
+  body:
+    type: raw
+    content: ${APITOOL_E2E_RAW_BODY}
