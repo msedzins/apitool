@@ -1,0 +1,6 @@
+name: List users
+method: GET
+request:
+  url: "{{base_url}}/users"
+  headers:
+    Authorization: "Bearer {{access_token}}"

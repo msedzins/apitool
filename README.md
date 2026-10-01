@@ -82,3 +82,7 @@ The palette exposes Git Status, Diff, Pull, Push, and Commit. These call the loc
 ## Outside the MVP
 
 The MVP runs one request at a time. It does not include collection synchronization, team accounts, shared cloud storage, request chaining, batch or parallel execution, retries, multipart or file bodies, mTLS, client certificates, or OAuth authorization-code login.
+
+## Fixture workspace and local verification
+
+`testdata/workspace/` is a small two-collection workspace used by the end-to-end app test. It includes an intentionally malformed request so the collection tree can demonstrate a visible validation failure while valid sibling requests remain usable. The test copies the fixture into a temporary directory, initializes a local Git repository, injects its endpoint and credentials through the process environment, and sends exactly one request to an in-process HTTP server. It checks response caching, history, redacted logs, and that `.apitool/` stays out of Git status. No external API or credential is required.
