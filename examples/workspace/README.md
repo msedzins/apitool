@@ -1,10 +1,9 @@
 # Example workspace
 
-Run the app from this directory and open the `users` collection:
+From the repository root, open the `users` collection in this example workspace:
 
 ```sh
-cd examples/workspace
-go run ../../cmd/apitool users
+go run ./cmd/apitool -e test examples/workspace/users
 ```
 
 The tree contains the valid `users/list` request and the intentionally invalid

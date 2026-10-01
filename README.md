@@ -2,6 +2,38 @@
 
 `apitool` is a terminal API client for request definitions kept in Git. It discovers collections inside the repository where it starts, lets you edit one YAML request at a time, and sends that request to the selected environment.
 
+![The apitool request browser showing a selected GET request and response pane](docs/images/apitool-overview.svg)
+
+## What you can do
+
+- Organize API requests into Git-reviewed YAML collections and environments.
+- Edit a request, search the collection, and inspect validation diagnostics.
+- Send HTTP requests with environment variables and inherited OAuth 2.0 client credentials.
+- Review response bodies, request history, and redacted execution logs locally.
+- Use Git status, diff, pull, push, and commit controls from the command palette.
+
+## Install
+
+Requires Go 1.25.4 or newer. From a clone of this repository, install the command with:
+
+```sh
+go install ./cmd/apitool
+```
+
+Go places the executable in `$(go env GOPATH)/bin` (or `GOBIN` if set). To build a binary in the current directory instead, run `go build -o apitool ./cmd/apitool`.
+
+## First run
+
+Run apitool from inside the Git workspace. With no collection argument, it opens the collection picker. Pass a collection name with `-e` (or `--env`) to select its starting environment. Use `-c` (or `--confirm-dangerous`) to ask before sending POST, PUT, PATCH, and DELETE requests:
+
+```sh
+apitool
+apitool -e test payments
+apitool -e prod -c payments
+```
+
+Use the collection picker to select a collection, the environment picker to switch environments, `/` to search requests, and `e` to edit the selected request. The command palette (`Ctrl+K`) contains History and the Git actions. Press `?` for the keyboard guide.
+
 ## Workspace layout
 
 Each collection is a directory containing `.api/`:
@@ -53,25 +85,12 @@ auth:
 
 Set `PAYMENTS_CLIENT_ID` and `PAYMENTS_CLIENT_SECRET` in the shell or secret manager that starts apitool. Do not put credential values or access tokens in YAML. A request can inherit collection authentication, override it in a group, or set `auth: none` to disable it.
 
-## Start apitool
-
-Run apitool from inside the Git workspace. With no collection argument, it opens the collection picker. Use `-e` (or `--env`) to select the starting environment and `-c` (or `--confirm-dangerous`) to ask before sending POST, PUT, PATCH, and DELETE requests:
-
-```sh
-apitool
-apitool -e test
-apitool -e prod -c
-```
-
-Use the collection picker to select a collection, the environment picker to switch environments, `/` to search requests, and `e` to edit the selected request. The command palette (`Ctrl+K`) contains History and the Git actions. Press `?` for the keyboard guide.
-
 ## Example workspace and checks
 
-The [example workspace](examples/workspace/README.md) contains two collections and an intentionally invalid request so you can try collection discovery and diagnostics without creating definitions first. Start it with:
+The [example workspace](examples/workspace/README.md) contains two collections and an intentionally invalid request so you can try collection discovery and diagnostics without creating definitions first. From the repository root, open its Users collection with:
 
 ```sh
-cd examples/workspace
-go run ../../cmd/apitool -e test
+go run ./cmd/apitool -e test examples/workspace/users
 ```
 
 The end-to-end fixture test copies `testdata/workspace/` into a temporary Git repository. It includes invalid requests, including malformed YAML, to demonstrate validation errors alongside valid siblings. The test injects endpoint and credential values through the process environment, sends one request to an in-process HTTP server, and checks request editing, OAuth and request credential handling, response caching, history, redacted logs, and that `.apitool/` stays out of Git status. It requires no external API or credentials. Run it with:
