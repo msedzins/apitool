@@ -1,4 +1,4 @@
-# apitool
+# apitool (in progress)
 
 `apitool` is a terminal API client for request definitions kept in Git. It discovers collections inside the repository where it starts, lets you edit one YAML request at a time, and sends that request to the selected environment.
 
